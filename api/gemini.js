@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  // Configuración de seguridad (CORS) para que funcione en tu app
+  // 1. Configuración de Seguridad (CORS)
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -13,43 +13,47 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Buscamos la llave de OpenRouter
-  const API_KEY = process.env.OPENROUTER_API_KEY;
+  // 2. Buscamos la llave de Groq
+  const API_KEY = process.env.GROQ_API_KEY;
 
   if (!API_KEY) {
-    console.error("Falta la llave OPENROUTER_API_KEY en Vercel");
-    return res.status(500).json({ error: 'Falta la API Key de OpenRouter.' });
+    return res.status(500).json({ error: 'Falta la API Key de Groq en Vercel.' });
   }
 
   const { prompt } = req.body;
+  if (!prompt) return res.status(400).json({ error: 'Falta el prompt' });
+
+  // 3. Configuración para Groq
+  const url = "https://api.groq.com/openai/v1/chat/completions";
   
-  // URL DE OPENROUTER (La puerta universal)
-  const url = "https://openrouter.ai/api/v1/chat/completions";
-  // Modelo gratuito
-  const model = "google/gemini-2.0-flash-exp:free"; 
+  // MODELO: Usamos Llama 3 (versión 8b) que es muy rápido y bueno para chat
+  // Otros modelos disponibles: "mixtral-8x7b-32768", "llama3-70b-8192"
+  const model = "llama3-8b-8192"; 
 
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://obsidiana-app.vercel.app',
-        'X-Title': 'Obsidiana App'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: model,
-        messages: [{ role: "user", content: prompt }]
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.6 // Un poco más creativo
       })
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Error OpenRouter:", data);
+      console.error("Error Groq:", data);
       throw new Error(data.error?.message || `Error ${response.status}`);
     }
 
+    // Groq devuelve formato compatible con OpenAI
     const text = data.choices?.[0]?.message?.content || "Sin respuesta";
     res.status(200).json({ text });
 
