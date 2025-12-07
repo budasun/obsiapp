@@ -26,9 +26,8 @@ export default async function handler(req, res) {
   // 3. Configuración para Groq
   const url = "https://api.groq.com/openai/v1/chat/completions";
   
-  // MODELO: Usamos Llama 3 (versión 8b) que es muy rápido y bueno para chat
-  // Otros modelos disponibles: "mixtral-8x7b-32768", "llama3-70b-8192"
-  const model = "llama3-8b-8192"; 
+// Usamos Llama 3.1 8B (Gratis y rápido)
+const model = "meta-llama/llama-3.1-8b-instruct:free";
 
   try {
     const response = await fetch(url, {
