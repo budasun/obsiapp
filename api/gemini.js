@@ -28,8 +28,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Falta el prompt' });
     }
 
-    // Usamos el modelo flash-8b que es muy permisivo para cuentas nuevas
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${API_KEY}`;
+   // Usamos el modelo estándar flash
+const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
     
     const response = await fetch(url, {
       method: 'POST',
