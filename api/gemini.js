@@ -13,45 +13,61 @@ export default async function handler(req, res) {
     return;
   }
 
-  // AQUÍ ESTÁ LA SOLUCIÓN: Buscamos la llave con el nombre nuevo
   const API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_API_KEY;
 
   if (!API_KEY) {
-    console.error("Error: No encuentro ninguna llave API en las variables de entorno.");
-    return res.status(500).json({ error: 'Falta la API Key en el servidor (Configura GEMINI_API_KEY en Vercel)' });
+    return res.status(500).json({ error: 'Falta la API Key en Vercel.' });
   }
 
-  try {
-    const { prompt } = req.body;
+  const { prompt } = req.body;
+  if (!prompt) return res.status(400).json({ error: 'Falta el prompt' });
 
-    if (!prompt) {
-      return res.status(400).json({ error: 'Falta el prompt' });
+  // LISTA DE MODELOS A PROBAR (Plan A, B, C y D)
+  // El código probará uno por uno hasta que uno funcione.
+  const modelsToTry = [
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash-001",
+    "gemini-pro" // El clásico infalible
+  ];
+
+  let lastError = null;
+
+  for (const model of modelsToTry) {
+    try {
+      console.log(`Intentando conectar con: ${model}...`);
+      
+      // Usamos la API v1beta que es la más compatible hoy
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7 }
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || `Error ${response.status}`);
+      }
+
+      // ¡SI LLEGAMOS AQUÍ, FUNCIONÓ!
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Sin respuesta";
+      return res.status(200).json({ text }); // Enviamos la respuesta y terminamos
+
+    } catch (error) {
+      console.error(`Falló el modelo ${model}:`, error.message);
+      lastError = error.message;
+      // El bucle continuará automáticamente con el siguiente modelo...
     }
-
-   // Usamos el modelo estándar flash
-const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.5 }
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("Error de Google:", data);
-      throw new Error(data.error?.message || 'Error de Google');
-    }
-
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Sin respuesta";
-    res.status(200).json({ text });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
   }
+
+  // Si llegamos aquí, es que fallaron los 4 modelos
+  return res.status(500).json({ 
+    error: `No se pudo conectar con ningún modelo. Revisa que la API 'Generative Language' esté habilitada en Google Cloud. Último error: ${lastError}` 
+  });
 }
