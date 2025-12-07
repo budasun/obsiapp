@@ -18,7 +18,7 @@ export default async function handler(req, res) {
 
   // 2. Obtener la llave del entorno seguro de Vercel
   // OJO: Aquí se usa process.env porque esto es Node.js (Servidor), no navegador.
-  const API_KEY = process.env.VITE_API_KEY; 
+  const API_KEY = process.env.VITE_API_KEY || process.env.GEMINI_API_KEY;
 
   if (!API_KEY) {
     return res.status(500).json({ error: 'Falta la API Key en el servidor' });
