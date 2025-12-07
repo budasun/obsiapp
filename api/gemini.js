@@ -14,8 +14,8 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 2. Buscar la llave (Probamos con ambos nombres por seguridad)
-  const API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_API_KEY;
+// PRUEBA DE FUEGO: Llave directa
+const API_KEY = "AIzaSyBqZDU0oWCzCUIzt6vHG4FFIwtNwVlApuo";
 
   if (!API_KEY) {
     return res.status(500).json({ error: 'Falta la API Key en las variables de entorno de Vercel.' });
