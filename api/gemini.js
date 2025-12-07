@@ -39,19 +39,21 @@ const API_KEY = "AIzaSyBqZDU0oWCzCUIzt6vHG4FFIwtNwVlApuo";
   // 4. Bucle de intentos
   for (const attempt of attempts) {
     try {
-      console.log(`Probando conexión con: ${attempt.model} (${attempt.version})...`);
-      
-      const url = `https://generativelanguage.googleapis.com/${attempt.version}/models/${attempt.model}:generateContent?key=${API_KEY}`;
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          // Temperatura baja para ser más compatible con modelos estrictos
-          generationConfig: { temperature: 0.6 }
-        })
-      });
+// ... (resto del código igual hasta el try)
+
+    // PRUEBA FINAL: Usar PaLM 2 (Legacy) que suele estar abierto
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/palm-2:generateText?key=${API_KEY}`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: { text: prompt }, // PaLM usa 'prompt' no 'contents'
+        temperature: 0.7
+      })
+    });
+
+// ... (resto del código para manejar la respuesta, OJO: PaLM devuelve 'candidates[0].output')
 
       const data = await response.json();
 
