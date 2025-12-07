@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -10,7 +9,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Usamos la llave de OpenRouter
+  // IMPORTANTE: Asegúrate de que esta variable exista en Vercel
   const API_KEY = process.env.OPENROUTER_API_KEY;
 
   if (!API_KEY) {
@@ -19,7 +18,7 @@ export default async function handler(req, res) {
 
   const { prompt } = req.body;
   const url = "https://openrouter.ai/api/v1/chat/completions";
-  // Modelo gratuito de OpenRouter
+  // Modelo gratuito
   const model = "google/gemini-2.0-flash-exp:free"; 
 
   try {
