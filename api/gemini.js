@@ -9,16 +9,14 @@ export default async function handler(req, res) {
     return;
   }
 
-  // IMPORTANTE: Asegúrate de que esta variable exista en Vercel
   const API_KEY = process.env.OPENROUTER_API_KEY;
 
   if (!API_KEY) {
-    return res.status(500).json({ error: 'Falta la API Key de OpenRouter en Vercel.' });
+    return res.status(500).json({ error: 'Falta la API Key de OpenRouter.' });
   }
 
   const { prompt } = req.body;
   const url = "https://openrouter.ai/api/v1/chat/completions";
-  // Modelo gratuito
   const model = "google/gemini-2.0-flash-exp:free"; 
 
   try {
