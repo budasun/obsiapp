@@ -2,10 +2,10 @@ import { CHATBOT_SYSTEM_INSTRUCTION, DREAM_ANALYSIS_SYSTEM_INSTRUCTION, MIRACLE_
 
 // Función maestra: Solo habla con TU servidor (/api/gemini)
 const callMyServer = async (promptText: string, systemInstruction: string) => {
-  // Combinamos la instrucción para que OpenRouter la entienda como contexto
   const fullPrompt = `INSTRUCCIÓN DEL SISTEMA:\n${systemInstruction}\n\n---\n\nUSUARIO:\n${promptText}`;
 
   try {
+    console.log("Enviando a /api/gemini...");
     const response = await fetch('/api/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
