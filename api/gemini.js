@@ -1,22 +1,31 @@
 export default async function handler(req, res) {
+  // Configuración de seguridad (CORS) para que funcione en tu app
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
+  // Buscamos la llave de OpenRouter
   const API_KEY = process.env.OPENROUTER_API_KEY;
 
   if (!API_KEY) {
+    console.error("Falta la llave OPENROUTER_API_KEY en Vercel");
     return res.status(500).json({ error: 'Falta la API Key de OpenRouter.' });
   }
 
   const { prompt } = req.body;
+  
+  // URL DE OPENROUTER (La puerta universal)
   const url = "https://openrouter.ai/api/v1/chat/completions";
+  // Modelo gratuito
   const model = "google/gemini-2.0-flash-exp:free"; 
 
   try {
@@ -37,6 +46,7 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
+      console.error("Error OpenRouter:", data);
       throw new Error(data.error?.message || `Error ${response.status}`);
     }
 
