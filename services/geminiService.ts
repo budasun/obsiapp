@@ -1,36 +1,22 @@
 import { CHATBOT_SYSTEM_INSTRUCTION, DREAM_ANALYSIS_SYSTEM_INSTRUCTION, MIRACLE_FEEDBACK_SYSTEM_INSTRUCTION } from "../constants";
 
-// --- CONFIGURACIÓN CRÍTICA ---
+// --- CONFIGURACIÓN ---
 const API_KEY = import.meta.env.VITE_API_KEY;
 
-// OJO AQUÍ: Usamos la API "v1" (SIN BETA) y el modelo "gemini-pro".
-// Esta es la combinación más estable de Google.
-const BASE_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
-
-interface GeminiResponse {
-  candidates?:Array<{
-    content?: {
-      parts?: Array<{ text?: string }>;
-    };
-  }>;
-  error?: {
-    message: string;
-    code?: number;
-    status?: string;
-  };
-}
+// Usamos la v1beta con el modelo flash estándar
+const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
 const callGoogleAI = async (prompt: string, systemInstruction: string) => {
-  if (!API_KEY) throw new Error("Falta VITE_API_KEY en Vercel");
+  if (!API_KEY) throw new Error("Falta VITE_API_KEY");
 
-  // En la versión v1 estándar, inyectamos la instrucción del sistema en el texto
-  // para asegurar máxima compatibilidad.
-  const finalPrompt = `INSTRUCCIONES DEL SISTEMA:\n${systemInstruction}\n\n---\n\nUSUARIO:\n${prompt}`;
-
+  // Estructura limpia para v1beta
   const payload = {
     contents: [{
-      parts: [{ text: finalPrompt }]
+      parts: [{ text: prompt }]
     }],
+    system_instruction: {
+      parts: [{ text: systemInstruction }]
+    },
     generationConfig: {
       temperature: 0.7,
     }
@@ -42,52 +28,29 @@ const callGoogleAI = async (prompt: string, systemInstruction: string) => {
     body: JSON.stringify(payload)
   });
 
-  const data = (await response.json()) as GeminiResponse;
+  const data = await response.json();
 
-  if (!response.ok || data.error) {
+  if (!response.ok) {
     console.error("Error Google:", data);
-    throw new Error(data.error?.message || "Error de conexión");
+    // Este mensaje nos dirá la verdad si falla
+    throw new Error(data.error?.message || "Error desconocido");
   }
 
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "Sin respuesta.";
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "Sin respuesta";
 };
 
-// --- FUNCIONES EXPORTADAS ---
-
-export const analyzeDream = async (dreamText: string) => {
-  try {
-    return await callGoogleAI(dreamText, DREAM_ANALYSIS_SYSTEM_INSTRUCTION);
-  } catch (error) {
-    console.error(error);
-    return "No pude interpretar el sueño. Verifica tu conexión.";
-  }
+// --- EXPORTS ---
+export const analyzeDream = async (text: string) => {
+  try { return await callGoogleAI(text, DREAM_ANALYSIS_SYSTEM_INSTRUCTION); }
+  catch (e) { return "Error de conexión."; }
 };
 
-export const getMiracleFeedback = async (question: string, answer: string) => {
-  try {
-    return await callGoogleAI(`Pregunta: ${question}\nRespuesta: ${answer}`, MIRACLE_FEEDBACK_SYSTEM_INSTRUCTION);
-  } catch (error) {
-    console.error(error);
-    return "Error al conectar con el oráculo.";
-  }
+export const getMiracleFeedback = async (q: string, a: string) => {
+  try { return await callGoogleAI(`P: ${q}\nR: ${a}`, MIRACLE_FEEDBACK_SYSTEM_INSTRUCTION); }
+  catch (e) { return "Error de conexión."; }
 };
 
-let chatHistory: any[] = [];
-
-export const sendMessageToOsiris = async (userMessage: string) => {
-  try {
-    // Gestión simplificada del historial para v1
-    const context = chatHistory.map(msg => `${msg.role === 'user' ? 'USUARIO' : 'OSIRIS'}: ${msg.parts[0].text}`).join('\n');
-    const fullPrompt = `${context}\nUSUARIO: ${userMessage}`;
-    
-    // Llamamos a la función genérica pero con el historial inyectado
-    const aiResponse = await callGoogleAI(fullPrompt, CHATBOT_SYSTEM_INSTRUCTION);
-
-    chatHistory.push({ role: "user", parts: [{ text: userMessage }] });
-    chatHistory.push({ role: "model", parts: [{ text: aiResponse }] });
-
-    return aiResponse;
-  } catch (error) {
-    return "Error de conexión con Osiris.";
-  }
+export const sendMessageToOsiris = async (msg: string) => {
+  try { return await callGoogleAI(msg, CHATBOT_SYSTEM_INSTRUCTION); }
+  catch (e) { return "Error de conexión."; }
 };
