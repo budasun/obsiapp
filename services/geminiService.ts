@@ -4,7 +4,7 @@ import { CHATBOT_SYSTEM_INSTRUCTION, DREAM_ANALYSIS_SYSTEM_INSTRUCTION, MIRACLE_
 const API_KEY = import.meta.env.VITE_API_KEY;
 
 // Usamos la v1beta con el modelo flash estándar
-const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent";
 
 const callGoogleAI = async (prompt: string, systemInstruction: string) => {
   if (!API_KEY) throw new Error("Falta VITE_API_KEY");
