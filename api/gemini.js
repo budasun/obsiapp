@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  // 1. Configuración de Seguridad (CORS) - Para que tu app no sea bloqueada
+  // CORS (Seguridad)
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -8,72 +8,59 @@ export default async function handler(req, res) {
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
-  // Respuesta rápida para verificaciones del navegador
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
-// PRUEBA DE FUEGO: Llave directa
-const API_KEY = "AIzaSyBqZDU0oWCzCUIzt6vHG4FFIwtNwVlApuo";
+  // Usamos la llave de OpenRouter (puede estar en cualquiera de estas variables)
+  const API_KEY = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || process.env.VITE_API_KEY;
 
   if (!API_KEY) {
-    return res.status(500).json({ error: 'Falta la API Key en las variables de entorno de Vercel.' });
+    return res.status(500).json({ error: 'Falta la API Key de OpenRouter.' });
   }
 
   const { prompt } = req.body;
   if (!prompt) return res.status(400).json({ error: 'Falta el prompt' });
 
-  // 3. ESTRATEGIA MAESTRA: Lista de intentos
-  // Probaremos estas 4 combinaciones en orden. Una TIENE que funcionar.
-  const attempts = [
-    { model: 'gemini-1.5-flash', version: 'v1beta' },       // La más nueva y rápida
-    { model: 'gemini-1.5-flash-latest', version: 'v1beta' },// Alias común
-    { model: 'gemini-1.5-flash-8b', version: 'v1beta' },    // Versión ligera
-    { model: 'gemini-pro', version: 'v1beta' },             // Pro en Beta
-    { model: 'gemini-pro', version: 'v1' }                  // Pro Clásico (Estable)
-  ];
+  // URL DE OPENROUTER (La puerta universal)
+  const url = "https://openrouter.ai/api/v1/chat/completions";
+  
+  // MODELO: Usamos el gratuito de Google vía OpenRouter
+  // Si quieres pagar por calidad premium, cambia a "google/gemini-pro-1.5"
+  const model = "google/gemini-flash-1.5"; 
 
-  let lastError = null;
-
-  // 4. Bucle de intentos
-  for (const attempt of attempts) {
-    try {
-// ... (resto del código igual hasta el try)
-
-    // PRUEBA FINAL: Usar PaLM 2 (Legacy) que suele estar abierto
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/palm-2:generateText?key=${API_KEY}`;
-    
+  try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://obsidiana-app.vercel.app', // Tu sitio (opcional)
+        'X-Title': 'Obsidiana App'
+      },
       body: JSON.stringify({
-        prompt: { text: prompt }, // PaLM usa 'prompt' no 'contents'
+        model: model,
+        messages: [
+          { role: "user", content: prompt }
+        ],
         temperature: 0.7
       })
     });
 
-// ... (resto del código para manejar la respuesta, OJO: PaLM devuelve 'candidates[0].output')
+    const data = await response.json();
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || `Error ${response.status}`);
-      }
-
-      // ¡ÉXITO! Encontramos un modelo que funciona.
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Sin respuesta";
-      return res.status(200).json({ text }); // Enviamos y terminamos aquí.
-
-    } catch (error) {
-      console.error(`Falló ${attempt.model}: ${error.message}`);
-      lastError = error.message;
-      // Si falla, el código sigue automáticamente al siguiente intento...
+    if (!response.ok) {
+      console.error("Error OpenRouter:", data);
+      throw new Error(data.error?.message || `Error ${response.status}`);
     }
-  }
 
-  // 5. Si llegamos aquí, fallaron TODOS los modelos
-  return res.status(500).json({ 
-    error: `No se pudo conectar con ningún modelo de Google. Último error: ${lastError}` 
-  });
+    // OpenRouter devuelve formato estándar OpenAI
+    const text = data.choices?.[0]?.message?.content || "Sin respuesta";
+    res.status(200).json({ text });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
 }
