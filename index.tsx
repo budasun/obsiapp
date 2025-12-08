@@ -1,66 +1,50 @@
-import React, { useState } from 'react';
-import { createRoot } from 'react-dom/client';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import './index.css';
+
+// Importamos tus componentes
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
-import Login from './components/Login';
+import Agenda from './components/Agenda';
 import DreamJournal from './components/DreamJournal';
 import Chatbot from './components/Chatbot';
 import Community from './components/Community';
 import Glossary from './components/Glossary';
-import UserProfileEdit from './components/UserProfileEdit';
-import Agenda from './components/Agenda';
-import { AppView, UserProfile } from './types';
+import Login from './components/Login';
 
+// Componente principal que organiza las rutas
 const App = () => {
-  const [currentView, setCurrentView] = useState<AppView>(AppView.LOGIN);
-  const [user, setUser] = useState<UserProfile | null>(null);
+  // Aquí podrías poner lógica para verificar si está logueado
+  // Por ahora, asumimos que sí para que veas la app funcionar
+  const isAuthenticated = true; 
 
-  const handleLogout = () => {
-    setUser(null);
-    setCurrentView(AppView.LOGIN);
-  };
-
-  const handleUpdateUser = (updatedUser: UserProfile) => {
-    setUser(updatedUser);
-  };
-
-  const renderContent = () => {
-    switch (currentView) {
-      case AppView.LOGIN:
-        return <Login onLogin={setUser} onNavigate={setCurrentView} />;
-      case AppView.DASHBOARD:
-        return user ? <Dashboard user={user} /> : null;
-      case AppView.DREAMS:
-        return <DreamJournal />;
-      case AppView.CHATBOT:
-        return <Chatbot />;
-      case AppView.COMMUNITY:
-        return <Community />;
-      case AppView.GLOSSARY:
-        return <Glossary />;
-      case AppView.PROFILE:
-        return user ? <UserProfileEdit user={user} onUpdate={handleUpdateUser} /> : null;
-      case AppView.AGENDA:
-        return <Agenda />;
-      default:
-        return user ? <Dashboard user={user} /> : <Login onLogin={setUser} onNavigate={setCurrentView} />;
-    }
-  };
+  if (!isAuthenticated) {
+    return <Login onLogin={() => window.location.reload()} />;
+  }
 
   return (
-    <Layout 
-      currentView={currentView} 
-      onChangeView={setCurrentView} 
-      user={user}
-      onLogout={handleLogout}
-    >
-      {renderContent()}
+    <Layout onLogout={() => console.log("Cerrar sesión")}>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/agenda" element={<Agenda />} />
+        <Route path="/dreams" element={<DreamJournal />} />
+        <Route path="/chat" element={<Chatbot />} />
+        <Route path="/community" element={<Community />} />
+        <Route path="/glossary" element={<Glossary />} />
+        {/* Ruta por defecto si se pierde */}
+        <Route path="*" element={<Dashboard />} />
+      </Routes>
     </Layout>
   );
 };
 
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  const root = createRoot(rootElement);
-  root.render(<App />);
-}
+// Renderizado final
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    {/* BrowserRouter es el motor que hace funcionar los enlaces */}
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
+);
