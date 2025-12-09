@@ -7,9 +7,28 @@ interface LayoutProps {
   onLogout: () => void;
 }
 
+import { supabase } from '../lib/supabase';
+
+interface UserProfile {
+  full_name: string;
+  avatar_url: string;
+}
+
 export default function Layout({ children, onLogout }: LayoutProps) {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  React.useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setProfile({
+          full_name: user.user_metadata.full_name || 'Viajera Lunar',
+          avatar_url: user.user_metadata.avatar_url || '',
+        });
+      }
+    });
+  }, []);
 
   const menuItems = [
     { icon: Moon, label: 'Mi Ciclo Lunar', path: '/' },
@@ -78,7 +97,16 @@ export default function Layout({ children, onLogout }: LayoutProps) {
         </nav >
 
         {/* Footer del Menú */}
-        < div className="p-4 border-t border-pink-100 bg-white" >
+        <div className="p-4 border-t border-pink-100 bg-white">
+          {profile && (
+            <div className="flex items-center gap-3 mb-4 px-2">
+              <img src={profile.avatar_url} alt="Profile" className="w-10 h-10 rounded-full border border-pink-200" />
+              <div className="overflow-hidden">
+                <p className="text-sm font-bold text-gray-800 truncate">{profile.full_name}</p>
+                <p className="text-xs text-pink-500">Conectada</p>
+              </div>
+            </div>
+          )}
           <button
             onClick={onLogout}
             className="flex items-center gap-3 px-4 py-3 text-gray-500 hover:text-red-500 w-full rounded-xl hover:bg-red-50 transition-colors"
@@ -86,8 +114,8 @@ export default function Layout({ children, onLogout }: LayoutProps) {
             <LogOut size={20} />
             <span className="font-medium">Cerrar Sesión</span>
           </button>
-        </div >
-      </aside >
+        </div>
+      </aside>
 
       {/* Contenido Principal */}
       < main

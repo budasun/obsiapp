@@ -1,20 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { analyzeDream } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
+import { supabase } from '../lib/supabase';
+import { User, Calendar } from 'lucide-react';
+
+interface Dream {
+  id: string;
+  description: string;
+  interpretation: string;
+  date: string;
+}
 
 export default function DreamJournal() {
   const [dream, setDream] = useState('');
   const [analysis, setAnalysis] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState<Dream[]>([]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('dream_history');
-    if (saved) {
-      setHistory(JSON.parse(saved));
-    }
+    fetchDreams();
   }, []);
+
+  const fetchDreams = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('dreams')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching dreams:', error);
+    } else {
+      setHistory(data || []);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!dream.trim()) return;
@@ -23,9 +45,27 @@ export default function DreamJournal() {
       const result = await analyzeDream(dream);
       setAnalysis(result);
 
-      const newHistory = [...history, result];
-      setHistory(newHistory);
-      localStorage.setItem('dream_history', JSON.stringify(newHistory));
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        const newDream = {
+          description: dream,
+          interpretation: result,
+          user_id: user.id,
+          date: new Date().toISOString()
+        };
+
+        const { error } = await supabase
+          .from('dreams')
+          .insert([newDream]);
+
+        if (error) {
+          console.error('Error saving dream:', error);
+        } else {
+          fetchDreams();
+        }
+      }
+
     } catch (error) {
       console.error(error);
     } finally {
@@ -74,6 +114,28 @@ export default function DreamJournal() {
           </div>
         </div>
       )}
+
+      {/* Dream History */}
+      <div className="space-y-4">
+        <h3 className="text-xl font-serif text-pink-900 mb-2">Historial de Sueños</h3>
+        {history.map((item) => (
+          <div key={item.id} className="bg-white p-4 rounded-xl border border-pink-50 shadow-sm hover:border-pink-200 transition-colors">
+            <div className="flex items-center gap-2 text-xs text-pink-400 mb-2">
+              <Calendar size={14} />
+              <span>{new Date(item.date).toLocaleDateString()}</span>
+            </div>
+            <p className="font-medium text-gray-800 mb-2 line-clamp-2">{item.description}</p>
+            <div className="text-sm text-gray-600 bg-pink-50 p-3 rounded-lg line-clamp-3">
+              {item.interpretation}
+            </div>
+          </div>
+        ))}
+        {history.length === 0 && (
+          <div className="text-center py-8 text-gray-400 italic">
+            No hay sueños registrados aún.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

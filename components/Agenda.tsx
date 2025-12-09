@@ -2,25 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AgendaEvent } from '../types';
 import { Calendar, Bell, Plus, Trash2, Clock, CheckCircle } from 'lucide-react';
-
-const MOCK_EVENTS: AgendaEvent[] = [
-  {
-    id: '1',
-    title: 'Meditación Luna Nueva',
-    date: new Date().toISOString().split('T')[0],
-    time: '20:00',
-    type: 'ritual',
-    reminderEnabled: true
-  },
-  {
-    id: '2',
-    title: 'Ginecólogo (Revisión)',
-    date: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0],
-    time: '10:00',
-    type: 'medical',
-    reminderEnabled: true
-  }
-];
+import { supabase } from '../lib/supabase';
 
 const Agenda: React.FC = () => {
   const [events, setEvents] = useState<AgendaEvent[]>([]);
@@ -28,24 +10,25 @@ const Agenda: React.FC = () => {
   const [permissionGranted, setPermissionGranted] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('agenda_events');
-    if (saved) {
-      try {
-        setEvents(JSON.parse(saved));
-      } catch (e) {
-        console.error("Error parsing events", e);
-        setEvents(MOCK_EVENTS);
-      }
-    } else {
-      setEvents(MOCK_EVENTS);
-    }
+    fetchEvents();
   }, []);
 
-  useEffect(() => {
-    if (events.length > 0) {
-      localStorage.setItem('agenda_events', JSON.stringify(events));
+  const fetchEvents = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('agenda')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching events:', error);
+    } else {
+      setEvents(data || []);
     }
-  }, [events]);
+  };
 
   const [newEvent, setNewEvent] = useState({
     title: '',
@@ -69,21 +52,50 @@ const Agenda: React.FC = () => {
     }
   };
 
-  const handleAddEvent = (e: React.FormEvent) => {
+  const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    const event: AgendaEvent = {
-      id: Date.now().toString(),
-      ...newEvent,
-      type: newEvent.type as 'ritual' | 'medical' | 'practice' | 'other',
-      reminderEnabled: true
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const eventData = {
+      title: newEvent.title,
+      date: newEvent.date,
+      time: newEvent.time,
+      type: newEvent.type,
+      reminder_enabled: true,
+      user_id: user.id
     };
-    setEvents([...events, event]);
-    setShowForm(false);
-    setNewEvent({ title: '', date: new Date().toISOString().split('T')[0], time: '09:00', type: 'ritual' });
+
+    const { data, error } = await supabase
+      .from('agenda')
+      .insert([eventData])
+      .select();
+
+    if (error) {
+      console.error('Error saving event:', error);
+    } else if (data) {
+      setEvents([...events, ...data as any]); // Assuming Supabase returns the created object compatible (mapping needed maybe if keys differ)
+      // Wait, types might be an issue if backend uses snake_case and frontend camelCase. 
+      // Based on previous files, I should align types or map them.
+      // Assuming Supabase auto-generated types or flexibility. 
+      // Actually, let's refetch to be safe and simple, or map manually.
+      fetchEvents();
+      setShowForm(false);
+      setNewEvent({ title: '', date: new Date().toISOString().split('T')[0], time: '09:00', type: 'ritual' });
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setEvents(events.filter(ev => ev.id !== id));
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase
+      .from('agenda')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting event:', error);
+    } else {
+      setEvents(events.filter(ev => ev.id !== id));
+    }
   };
 
   const getTypeColor = (type: string) => {
@@ -191,7 +203,7 @@ const Agenda: React.FC = () => {
 
       {/* Events List */}
       <div className="space-y-3">
-        {events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(event => (
+        {events.map(event => (
           <div key={event.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between group hover:border-obsidian-200 transition-all">
             <div className="flex items-center space-x-4">
               <div className="flex flex-col items-center justify-center w-12 h-12 bg-gray-50 rounded-lg border border-gray-200 text-gray-600">

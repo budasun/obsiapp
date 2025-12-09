@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getMiracleFeedback } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
+import { supabase } from '../lib/supabase';
 
 const MIRACLE_QUESTIONS = [
   "Si esta noche ocurriera un milagro y tu dolor desapareciera, ¿qué harías diferente mañana?",
@@ -19,20 +20,16 @@ export default function Dashboard() {
   useEffect(() => {
     // 1. Cargar pregunta aleatoria
     setQuestion(MIRACLE_QUESTIONS[Math.floor(Math.random() * MIRACLE_QUESTIONS.length)]);
-    
-    // 2. Cargar nombre real del usuario desde localStorage
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        // Si el usuario tiene nombre, úsalo. Si no, busca el email antes de la @
-        const nameToUse = parsedUser.name || parsedUser.email?.split('@')[0] || 'Alquimista';
-        // Capitalizar la primera letra
+
+    // 2. Cargar nombre real del usuario desde Supabase
+    const fetchUserName = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const nameToUse = user.user_metadata.full_name || user.email?.split('@')[0] || 'Alquimista';
         setUserName(nameToUse.charAt(0).toUpperCase() + nameToUse.slice(1));
-      } catch (e) {
-        console.error("Error leyendo usuario", e);
       }
-    }
+    };
+    fetchUserName();
   }, []);
 
   const handleGetFeedback = async () => {
@@ -54,7 +51,7 @@ export default function Dashboard() {
         {/* AQUÍ SE MUESTRA EL NOMBRE DINÁMICO */}
         <h1 className="text-3xl font-serif text-pink-900 mb-2">Hola, {userName}</h1>
         <p className="text-gray-600">Hoy es un buen día para conectar con tu centro.</p>
-        
+
         <div className="mt-6 grid grid-cols-2 gap-4">
           <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-pink-400">
             <span className="text-xs font-bold text-gray-400 uppercase">Ciclo Menstrual</span>
@@ -74,7 +71,7 @@ export default function Dashboard() {
           <span className="bg-pink-100 text-pink-600 p-2 rounded-lg text-xl">✨</span>
           <h2 className="text-xl font-bold text-pink-800">La Pregunta Milagro</h2>
         </div>
-        
+
         <p className="text-lg text-gray-700 italic mb-6 font-serif leading-relaxed">"{question}"</p>
 
         <textarea
@@ -100,9 +97,9 @@ export default function Dashboard() {
             <div className="prose prose-pink text-gray-700 leading-relaxed bg-pink-50 p-4 rounded-xl">
               <ReactMarkdown
                 components={{
-                  h1: ({node, ...props}) => <h3 className="text-lg font-bold text-pink-800 mt-2" {...props} />,
-                  strong: ({node, ...props}) => <span className="font-bold text-pink-900" {...props} />,
-                  li: ({node, ...props}) => <li className="pl-1" {...props} />,
+                  h1: ({ node, ...props }) => <h3 className="text-lg font-bold text-pink-800 mt-2" {...props} />,
+                  strong: ({ node, ...props }) => <span className="font-bold text-pink-900" {...props} />,
+                  li: ({ node, ...props }) => <li className="pl-1" {...props} />,
                 }}
               >
                 {feedback}
