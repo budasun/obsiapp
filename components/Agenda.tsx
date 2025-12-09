@@ -23,9 +23,29 @@ const MOCK_EVENTS: AgendaEvent[] = [
 ];
 
 const Agenda: React.FC = () => {
-  const [events, setEvents] = useState<AgendaEvent[]>(MOCK_EVENTS);
+  const [events, setEvents] = useState<AgendaEvent[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('agenda_events');
+    if (saved) {
+      try {
+        setEvents(JSON.parse(saved));
+      } catch (e) {
+        console.error("Error parsing events", e);
+        setEvents(MOCK_EVENTS);
+      }
+    } else {
+      setEvents(MOCK_EVENTS);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (events.length > 0) {
+      localStorage.setItem('agenda_events', JSON.stringify(events));
+    }
+  }, [events]);
 
   const [newEvent, setNewEvent] = useState({
     title: '',

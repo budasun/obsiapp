@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { analyzeDream } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
 
@@ -7,12 +7,25 @@ export default function DreamJournal() {
   const [analysis, setAnalysis] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const [history, setHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('dream_history');
+    if (saved) {
+      setHistory(JSON.parse(saved));
+    }
+  }, []);
+
   const handleAnalyze = async () => {
     if (!dream.trim()) return;
     setIsLoading(true);
     try {
       const result = await analyzeDream(dream);
       setAnalysis(result);
+
+      const newHistory = [...history, result];
+      setHistory(newHistory);
+      localStorage.setItem('dream_history', JSON.stringify(newHistory));
     } catch (error) {
       console.error(error);
     } finally {
@@ -49,11 +62,11 @@ export default function DreamJournal() {
           <div className="prose prose-pink text-gray-700 leading-relaxed">
             <ReactMarkdown
               components={{
-                h1: ({node, ...props}) => <h3 className="text-lg font-bold text-pink-700 mt-4 mb-2" {...props} />,
-                h2: ({node, ...props}) => <h4 className="text-md font-bold text-pink-600 mt-3 mb-2" {...props} />,
-                strong: ({node, ...props}) => <span className="font-bold text-pink-900 bg-pink-50 px-1 rounded" {...props} />,
-                ul: ({node, ...props}) => <ul className="list-disc pl-5 space-y-1 my-2" {...props} />,
-                li: ({node, ...props}) => <li className="pl-1" {...props} />,
+                h1: ({ node, ...props }) => <h3 className="text-lg font-bold text-pink-700 mt-4 mb-2" {...props} />,
+                h2: ({ node, ...props }) => <h4 className="text-md font-bold text-pink-600 mt-3 mb-2" {...props} />,
+                strong: ({ node, ...props }) => <span className="font-bold text-pink-900 bg-pink-50 px-1 rounded" {...props} />,
+                ul: ({ node, ...props }) => <ul className="list-disc pl-5 space-y-1 my-2" {...props} />,
+                li: ({ node, ...props }) => <li className="pl-1" {...props} />,
               }}
             >
               {analysis}

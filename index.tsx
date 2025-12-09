@@ -13,18 +13,24 @@ import Community from './components/Community';
 import Glossary from './components/Glossary';
 import Login from './components/Login';
 
+import { GoogleOAuthProvider } from '@react-oauth/google';
+
 // Componente principal que organiza las rutas
 const App = () => {
-  // Aquí podrías poner lógica para verificar si está logueado
-  // Por ahora, asumimos que sí para que veas la app funcionar
-  const isAuthenticated = true; 
+  // Verificar si hay usuario en localStorage
+  const isAuthenticated = !!localStorage.getItem('user');
 
   if (!isAuthenticated) {
-    return <Login onLogin={() => window.location.reload()} />;
+    return <Login onLogin={() => window.location.reload()} onNavigate={() => window.location.reload()} />;
   }
 
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    window.location.reload();
+  };
+
   return (
-    <Layout onLogout={() => console.log("Cerrar sesión")}>
+    <Layout onLogout={handleLogout}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/agenda" element={<Agenda />} />
@@ -42,9 +48,10 @@ const App = () => {
 // Renderizado final
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {/* BrowserRouter es el motor que hace funcionar los enlaces */}
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </GoogleOAuthProvider>
   </React.StrictMode>
 );
