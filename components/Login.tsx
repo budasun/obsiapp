@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile, AppView } from '../types';
 import { Flower, Star } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -18,6 +18,59 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
         email: '',
         avatarUrl: ''
     });
+
+    useEffect(() => {
+        // Verificar sesión activa al montar
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                handleSessionFound(session.user.id);
+            }
+        };
+
+        checkSession();
+
+        // Suscribirse a cambios de autenticación
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (session) {
+                handleSessionFound(session.user.id);
+            }
+        });
+
+        return () => {
+            subscription.unsubscribe();
+        };
+    }, []);
+
+    const handleSessionFound = async (userId: string) => {
+        try {
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+
+            if (profile) {
+                // Caso A: Perfil existe
+                const userProfile: UserProfile = {
+                    name: profile.full_name,
+                    birthDate: profile.birth_date,
+                    lastPeriodDate: profile.last_period_date,
+                    cycleLength: profile.cycle_length,
+                    email: profile.email || '', // Fallback si no está en perfil
+                    avatarUrl: profile.avatar_url
+                };
+                onLogin(userProfile);
+                onNavigate(AppView.DASHBOARD);
+            } else {
+                // Caso B: Perfil NO existe, ir al paso 2
+                setStep(2);
+            }
+        } catch (error) {
+            console.error('Error fetching profile:', error);
+            // Caso C: Error, mantenerse en paso 1 (no hacer nada explícito)
+        }
+    };
 
     const handleGoogleLogin = async () => {
         const { error } = await supabase.auth.signInWithOAuth({
