@@ -20,57 +20,58 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     });
 
     useEffect(() => {
-        // Verificar sesión activa al montar
-        const checkSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                handleSessionFound(session.user.id);
+        const handleAuthCheck = async (session: any) => {
+            if (!session?.user) return;
+
+            try {
+                const { data: profile, error } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (profile) {
+                    // Caso A: Perfil existe -> Login directo
+                    const userProfile: UserProfile = {
+                        name: profile.full_name,
+                        birthDate: profile.birth_date,
+                        lastPeriodDate: profile.last_period_date,
+                        cycleLength: profile.cycle_length,
+                        email: profile.email || session.user.email || '',
+                        avatarUrl: profile.avatar_url
+                    };
+                    onLogin(userProfile);
+                    onNavigate(AppView.DASHBOARD);
+                } else if (error && error.code === 'PGRST116') {
+                    // Caso B: Perfil NO existe (código específico de Supabase) -> Completar registro
+                    setStep(2);
+                } else {
+                    // Caso C: Otro error (conexión, etc) -> Mantenerse en login
+                    console.error('Error checking profile:', error);
+                }
+            } catch (err) {
+                console.error('Unexpected error:', err);
             }
         };
 
-        checkSession();
-
-        // Suscribirse a cambios de autenticación
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        // 1. Verificar sesión inicial
+        supabase.auth.getSession().then(({ data: { session } }) => {
             if (session) {
-                handleSessionFound(session.user.id);
+                handleAuthCheck(session);
+            }
+        });
+
+        // 2. Suscribirse a cambios (incluyendo redirección OAuth)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' || session) {
+                handleAuthCheck(session);
             }
         });
 
         return () => {
             subscription.unsubscribe();
         };
-    }, []);
-
-    const handleSessionFound = async (userId: string) => {
-        try {
-            const { data: profile, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-
-            if (profile) {
-                // Caso A: Perfil existe
-                const userProfile: UserProfile = {
-                    name: profile.full_name,
-                    birthDate: profile.birth_date,
-                    lastPeriodDate: profile.last_period_date,
-                    cycleLength: profile.cycle_length,
-                    email: profile.email || '', // Fallback si no está en perfil
-                    avatarUrl: profile.avatar_url
-                };
-                onLogin(userProfile);
-                onNavigate(AppView.DASHBOARD);
-            } else {
-                // Caso B: Perfil NO existe, ir al paso 2
-                setStep(2);
-            }
-        } catch (error) {
-            console.error('Error fetching profile:', error);
-            // Caso C: Error, mantenerse en paso 1 (no hacer nada explícito)
-        }
-    };
+    }, [onLogin, onNavigate]);
 
     const handleGoogleLogin = async () => {
         const { error } = await supabase.auth.signInWithOAuth({
