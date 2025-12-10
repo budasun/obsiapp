@@ -37,7 +37,7 @@ const App = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // PANTALLA DE CARGA (El Semáforo)
+  // PANTALLA DE CARGA (El Semáforo - IMPORTANTE)
   if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-pink-50">
