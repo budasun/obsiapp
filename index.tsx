@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Session } from '@supabase/supabase-js';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import './index.css';
 
 // Componentes
+import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import Agenda from './components/Agenda';
@@ -13,29 +13,24 @@ import DreamJournal from './components/DreamJournal';
 import Chatbot from './components/Chatbot';
 import Community from './components/Community';
 import Glossary from './components/Glossary';
-import Login from './components/Login';
+import UserProfileEdit from './components/UserProfileEdit';
+import Inbox from './components/Inbox';
 
 const App = () => {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Verificar sesión activa al iniciar
-    const checkSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setSession(session);
-      } catch (error) {
-        console.error('Error checking session:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    // 1. Verificar sesión actual al iniciar
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
 
-    checkSession();
-
-    // 2. Escuchar cambios de autenticación
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // 2. Escuchar cambios de autenticación (Login/Logout)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setLoading(false);
     });
@@ -43,41 +38,37 @@ const App = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 1. Estado de Carga (El Semáforo)
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-obsidian-50">
+      <div className="flex h-screen w-full items-center justify-center bg-pink-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-obsidian-700 mx-auto mb-4"></div>
-          <p className="text-obsidian-700 font-serif text-lg">Sincronizando con el Oráculo...</p>
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-pink-600 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-pink-800 font-serif text-lg animate-pulse">Conectando con el universo...</p>
         </div>
       </div>
     );
   }
 
-  // 2. Si hay sesión -> App Principal
-  if (session) {
-    return (
-      <Layout onLogout={() => supabase.auth.signOut()}>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/agenda" element={<Agenda />} />
-          <Route path="/dreams" element={<DreamJournal />} />
-          <Route path="/chat" element={<Chatbot />} />
-          <Route path="/community" element={<Community />} />
-          <Route path="/glossary" element={<Glossary />} />
-          <Route path="*" element={<Dashboard />} />
-        </Routes>
-      </Layout>
-    );
+  // Si no hay sesión, forzar Login
+  if (!session) {
+    return <Login onLogin={() => { }} onNavigate={() => { }} />;
   }
 
-  // 3. Si NO hay sesión -> Login
+  // Si hay sesión, mostrar la App
   return (
-    <Login
-      onLogin={() => { }} // El cambio de estado lo maneja el listener de supabase
-      onNavigate={() => { }}
-    />
+    <Layout onLogout={() => supabase.auth.signOut()}>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/agenda" element={<Agenda />} />
+        <Route path="/dreams" element={<DreamJournal />} />
+        <Route path="/chat" element={<Chatbot />} />
+        <Route path="/community" element={<Community />} />
+        <Route path="/glossary" element={<Glossary />} />
+        <Route path="/profile" element={<UserProfileEdit />} />
+        <Route path="/inbox" element={<Inbox />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Layout>
   );
 };
 

@@ -1,30 +1,97 @@
-
 import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../types';
 import { Save, User, Calendar, Droplet, Camera } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface UserProfileEditProps {
-  user: UserProfile;
-  onUpdate: (updatedUser: UserProfile) => void;
+  user?: UserProfile;
+  onUpdate?: (updatedUser: UserProfile) => void;
 }
 
 const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => {
-  const [formData, setFormData] = useState<UserProfile>(user);
+  const [formData, setFormData] = useState<UserProfile>({
+    name: '',
+    birthDate: '',
+    lastPeriodDate: '',
+    cycleLength: 28,
+    email: '',
+    avatarUrl: ''
+  });
+  const [loading, setLoading] = useState(!user);
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
-    setFormData(user);
+    if (user) {
+      setFormData(user);
+      setLoading(false);
+    } else {
+      fetchProfile();
+    }
   }, [user]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdate(formData);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+  const fetchProfile = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (profile) {
+        setFormData({
+          name: profile.full_name,
+          birthDate: profile.birth_date,
+          lastPeriodDate: profile.last_period_date,
+          cycleLength: profile.cycle_length,
+          email: authUser.email || '',
+          avatarUrl: profile.avatar_url
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      if (onUpdate) {
+        onUpdate(formData);
+      } else {
+        // Update Supabase directly
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const updates = {
+            id: user.id,
+            full_name: formData.name,
+            birth_date: formData.birthDate,
+            last_period_date: formData.lastPeriodDate,
+            cycle_length: formData.cycleLength,
+            updated_at: new Date(),
+          };
+          await supabase.from('profiles').upsert(updates);
+        }
+      }
+
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center p-8 text-gray-500">Cargando perfil...</div>;
+  }
+
   return (
-    <div className="max-w-2xl mx-auto space-y-8 animate-fade-in">
+    <div className="max-w-2xl mx-auto space-y-8 animate-fade-in py-8">
       <header className="text-center">
         <h2 className="text-3xl font-serif text-obsidian-900 mb-2">Tu Perfil Sagrado</h2>
         <p className="text-gray-600">Actualiza tus datos para recalcular tus ciclos y fases.</p>
@@ -39,7 +106,7 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
                 {formData.avatarUrl ? (
                   <img src={formData.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-2xl font-bold text-white">{formData.name.charAt(0)}</span>
+                  <span className="text-2xl font-bold text-white">{formData.name?.charAt(0) || '?'}</span>
                 )}
               </div>
               <div className="absolute bottom-0 right-0 bg-white p-1.5 rounded-full shadow-md border border-gray-200">
