@@ -23,7 +23,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: window.location.origin
+                redirectTo: window.location.origin // Esto detecta automáticamente si es localhost o Vercel
             }
         });
         if (error) console.error('Error logging in:', error.message);
