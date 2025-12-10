@@ -5,13 +5,10 @@ import { Flower } from 'lucide-react';
 const Login = () => {
     const handleGoogleLogin = async () => {
         try {
-            // Forzamos la URL exacta para evitar confusiones
-            const redirectUrl = 'https://obsiapp.vercel.app';
-
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: redirectUrl,
+                    redirectTo: window.location.origin, // Dinamico: localhost o Vercel
                     queryParams: {
                         access_type: 'offline',
                         prompt: 'consent',
