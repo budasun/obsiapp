@@ -3,6 +3,12 @@ import React, { useState } from 'react';
 import { UserProfile, AppView } from '../types';
 import { Flower, Star } from 'lucide-react';
 
+import { auth } from '../services/firebase';
+import {
+    signInWithPopup,
+    GoogleAuthProvider
+} from 'firebase/auth';
+
 interface LoginProps {
     onLogin: (user: UserProfile) => void;
     onNavigate: (view: AppView) => void;
@@ -10,18 +16,36 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     const [step, setStep] = useState(1);
+    const [error, setError] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         name: '',
         birthDate: '',
         lastPeriodDate: '',
-        cycleLength: 28
+        cycleLength: 28,
+        email: '',
+        avatarUrl: ''
     });
 
-    const handleSimulatedGoogleLogin = () => {
-        // Simulate a slight delay for realism
-        setTimeout(() => {
+    const handleGoogleLogin = async () => {
+        const provider = new GoogleAuthProvider();
+        try {
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+
+            setFormData(prev => ({
+                ...prev,
+                name: user.displayName || '',
+                email: user.email || '',
+                avatarUrl: user.photoURL || ''
+            }));
+
             setStep(2);
-        }, 800);
+        } catch (error: any) {
+            console.error("Error with Google Login:", error);
+            setError("Error al iniciar sesión con Google. Inténtalo de nuevo.");
+            // For testing/fallback if firebase is not fully setup in console
+            // setStep(2); 
+        }
     };
 
     const handleSubmitProfile = (e: React.FormEvent) => {
@@ -31,8 +55,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
             birthDate: formData.birthDate,
             lastPeriodDate: formData.lastPeriodDate,
             cycleLength: formData.cycleLength,
-            email: 'user@example.com',
-            avatarUrl: 'https://ui-avatars.com/api/?name=' + (formData.name || 'User') + '&background=fbcfe8&color=831843'
+            email: formData.email || 'user@example.com',
+            avatarUrl: formData.avatarUrl || 'https://ui-avatars.com/api/?name=' + (formData.name || 'User') + '&background=fbcfe8&color=831843'
         };
         onLogin(user);
         onNavigate(AppView.DASHBOARD);
@@ -55,8 +79,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                         <div className="space-y-6">
                             <p className="text-center text-gray-700 font-sans leading-relaxed">Inicia sesión para sincronizar tu sabiduría biológica con los ciclos celestes y guardar tu progreso en el tiempo.</p>
 
+                            {error && <p className="text-red-500 text-sm text-center mb-4">{error}</p>}
                             <button
-                                onClick={handleSimulatedGoogleLogin}
+                                onClick={handleGoogleLogin}
                                 className="w-full h-14 flex items-center justify-center space-x-4 bg-white border border-gray-200 hover:border-obsidian-300 text-gray-700 font-bold py-3 px-4 rounded-2xl transition-all transform hover:scale-[1.01] hover:shadow-lg active:scale-95 group"
                             >
                                 <div className="bg-white p-2 rounded-lg group-hover:bg-gray-50 transition-colors">

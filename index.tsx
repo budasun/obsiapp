@@ -10,6 +10,7 @@ import Glossary from './components/Glossary';
 import UserProfileEdit from './components/UserProfileEdit';
 import Agenda from './components/Agenda';
 import { AppView, UserProfile } from './types';
+import { auth } from './services/firebase';
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.LOGIN);
@@ -30,10 +31,15 @@ const App = () => {
     }
   }, [user, currentView]);
 
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('obsidiana_user');
-    setCurrentView(AppView.LOGIN);
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      setUser(null);
+      localStorage.removeItem('obsidiana_user');
+      setCurrentView(AppView.LOGIN);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
   };
 
   const handleUpdateUser = (updatedUser: UserProfile) => {
