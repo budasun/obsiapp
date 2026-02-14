@@ -42,7 +42,6 @@ const Agenda: React.FC = () => {
   });
 
   const requestNotificationPermission = () => {
-    // Simulation of Notification API
     if ("Notification" in window) {
       Notification.requestPermission().then(permission => {
         if (permission === "granted") {
@@ -52,8 +51,53 @@ const Agenda: React.FC = () => {
       });
     } else {
       alert("Tu navegador no soporta notificaciones nativas.");
-      setPermissionGranted(true); // Fallback for UI
+      setPermissionGranted(true);
     }
+  };
+
+  const generateGoogleCalendarUrl = (event: AgendaEvent) => {
+    const base = "https://calendar.google.com/calendar/render?action=TEMPLATE";
+    const title = encodeURIComponent(event.title);
+    const dateStr = event.date.replace(/-/g, '');
+    const timeStr = event.time.replace(/:/g, '') + '00';
+    const start = `${dateStr}T${timeStr}`;
+
+    const [h, m] = event.time.split(':').map(Number);
+    const endH = (h + 1).toString().padStart(2, '0');
+    const end = `${dateStr}T${endH}${m.toString().padStart(2, '0')}00`;
+
+    const details = encodeURIComponent(`Ritual de Obsidiana - Tipo: ${event.type}\nGenerado por tu Agenda Lunar.`);
+    return `${base}&text=${title}&dates=${start}/${end}&details=${details}`;
+  };
+
+  const handleExportICal = () => {
+    let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Obsidiana//Agenda Lunar//ES\nCALSCALE:GREGORIAN\n";
+
+    events.forEach(event => {
+      const dateStr = event.date.replace(/-/g, '');
+      const timeStr = event.time.replace(/:/g, '') + '00';
+      const start = `${dateStr}T${timeStr}`;
+      const [h, m] = event.time.split(':').map(Number);
+      const endH = (h + 1).toString().padStart(2, '0');
+      const end = `${dateStr}T${endH}${m.toString().padStart(2, '0')}00`;
+
+      icsContent += "BEGIN:VEVENT\n";
+      icsContent += `SUMMARY:${event.title}\n`;
+      icsContent += `DTSTART:${start}\n`;
+      icsContent += `DTEND:${end}\n`;
+      icsContent += `DESCRIPTION:Ritual de Obsidiana - Tipo: ${event.type}\n`;
+      icsContent += "END:VEVENT\n";
+    });
+
+    icsContent += "END:VCALENDAR";
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.setAttribute('download', 'agenda_obsidiana.ics');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleAddEvent = (e: React.FormEvent) => {
@@ -91,16 +135,12 @@ const Agenda: React.FC = () => {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={() => alert("Sincronización con Google Calendar vinculada a tu cuenta. (Simulación)")}
-            className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 font-medium px-4 py-2 rounded-xl hover:bg-gray-50 transition-all shadow-sm"
+            onClick={handleExportICal}
+            title="Exportar archivo de calendario (.ics)"
+            className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 font-medium px-4 py-2 rounded-xl hover:bg-gray-50 transition-all shadow-sm group"
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-            </svg>
-            <span>Sincronizar</span>
+            <Calendar className="w-4 h-4 text-obsidian-400 group-hover:scale-110 transition-transform" />
+            <span>Exportar iCal</span>
           </button>
           <button
             onClick={() => setShowForm(!showForm)}
@@ -199,7 +239,7 @@ const Agenda: React.FC = () => {
             <div className="flex items-center space-x-4">
               <div className="flex flex-col items-center justify-center w-12 h-12 bg-gray-50 rounded-lg border border-gray-200 text-gray-600">
                 <span className="text-xs font-bold uppercase">{new Date(event.date).toLocaleDateString(undefined, { month: 'short' })}</span>
-                <span className="text-lg font-bold">{new Date(event.date).getDate()}</span>
+                <span className="text-lg font-bold">{new Date(event.date).getDate() + 1}</span>
               </div>
               <div>
                 <h4 className="font-bold text-gray-900">{event.title}</h4>
@@ -212,7 +252,20 @@ const Agenda: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              {event.reminderEnabled && <Bell size={16} className="text-obsidian-400" />}
+              <a
+                href={generateGoogleCalendarUrl(event)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Añadir a Google Calendar"
+                className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                  <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+              </a>
               <button onClick={() => handleDelete(event.id)} className="p-2 text-gray-300 hover:text-red-400 transition-colors">
                 <Trash2 size={18} />
               </button>
