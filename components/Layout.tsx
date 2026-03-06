@@ -12,8 +12,10 @@ import {
   Calendar,
   User,
   Menu,
-  X
+  X,
+  Mail
 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -25,6 +27,7 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, user, onLogout }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isOnline } = useApp();
 
   if (!user && currentView === AppView.LOGIN) {
     return <>{children}</>;
@@ -53,6 +56,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, us
       <NavItem view={AppView.DREAMS} icon={BookHeart} label="Diario de Sueños" />
       <NavItem view={AppView.CHATBOT} icon={MessageCircleHeart} label="Consejera Osiris" />
       <NavItem view={AppView.COMMUNITY} icon={Users} label="Comunidad" />
+      <NavItem view={AppView.MESSAGES} icon={Mail} label="Mensajes" />
       <NavItem view={AppView.GLOSSARY} icon={BookOpen} label="Glosario" />
     </nav>
   );
@@ -76,10 +80,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, us
             className={`w-full mb-3 flex items-center space-x-3 px-4 py-2 rounded-lg transition-colors ${currentView === AppView.PROFILE ? 'bg-obsidian-100' : 'hover:bg-white border border-transparent hover:border-obsidian-100 shadow-sm'}`}
           >
             <div className="w-8 h-8 rounded-full bg-obsidian-200 flex items-center justify-center text-obsidian-700 font-bold text-xs">
-              {user?.name.charAt(0)}
+              {user?.name?.charAt(0) || '?'}
             </div>
             <div className="text-left overflow-hidden">
-              <p className="text-sm font-bold text-gray-700 truncate">{user?.name}</p>
+              <p className="text-sm font-bold text-gray-700 truncate">{user?.name || 'Usuario'}</p>
               <p className="text-xs text-gray-400">Ver Perfil</p>
             </div>
           </button>
@@ -125,10 +129,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, us
             className="w-full mb-4 flex items-center space-x-3 p-3 rounded-xl bg-white shadow-sm border border-obsidian-100"
           >
             <div className="w-10 h-10 rounded-full bg-obsidian-200 flex items-center justify-center text-obsidian-800 font-bold">
-              {user?.name.charAt(0)}
+              {user?.name?.charAt(0) || '?'}
             </div>
             <div className="text-left overflow-hidden">
-              <p className="font-bold text-gray-800 truncate">{user?.name}</p>
+              <p className="font-bold text-gray-800 truncate">{user?.name || 'Usuario'}</p>
               <p className="text-xs text-gray-500 font-medium">Gestionar cuenta</p>
             </div>
           </button>

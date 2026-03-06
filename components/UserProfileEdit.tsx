@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile } from '../types';
 import { Save, User, Calendar, Droplet, Camera, ShieldCheck } from 'lucide-react';
+import { db } from '../services/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 interface UserProfileEditProps {
   user: UserProfile;
@@ -34,9 +36,25 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 1. Actualizamos el estado global (Context/LocalStorage)
     onUpdate(formData);
+
+    // 2. Guardamos a la usuaria en Firestore para que aparezca en el Directorio
+    try {
+      // Usamos el nombre como ID (en un caso real sería el UID de Google, pero por ahora el nombre sirve de enlace)
+      const userRef = doc(db, 'users', formData.name);
+      await setDoc(userRef, {
+        name: formData.name,
+        avatarUrl: formData.avatarUrl || null,
+        joinDate: new Date().toISOString()
+      }, { merge: true }); // Merge evita borrar otros datos si ya existía
+    } catch (error) {
+      console.error("Error guardando usuaria en el directorio:", error);
+    }
+
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
   };
@@ -45,7 +63,7 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in pb-20">
       <header className="text-center">
         <h2 className="text-4xl font-serif text-obsidian-900 mb-2">Tu Perfil Sagrado</h2>
-        <p className="text-gray-500 font-medium">Actualiza tus datos para recalcular tus ciclos y fases.</p>
+        <p className="text-gray-500 font-medium">Actualiza tus datos para el círculo y tus ciclos.</p>
       </header>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] shadow-xl border border-obsidian-50 overflow-hidden transition-all duration-500 hover:shadow-2xl">

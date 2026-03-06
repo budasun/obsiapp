@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../types';
-import { sendMessageToOsiris } from '../services/geminiService';
+import { sendMessageToOsiris } from '../services/aiService';
 import { MessageCircleHeart, Send, Loader2, User } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 

@@ -1,73 +1,110 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import Layout from './components/Layout';
-import Dashboard from './components/Dashboard';
+import { AppProvider, useApp } from './context/AppContext';
+import LoadingSpinner from './components/LoadingSpinner';
+import ErrorBoundary from './components/ErrorBoundary';
+import OfflineBanner from './components/OfflineBanner';
 import Login from './components/Login';
-import DreamJournal from './components/DreamJournal';
-import Chatbot from './components/Chatbot';
-import Community from './components/Community';
-import Glossary from './components/Glossary';
-import UserProfileEdit from './components/UserProfileEdit';
-import Agenda from './components/Agenda';
-import { AppView, UserProfile } from './types';
-import { auth } from './services/firebase';
+import Layout from './components/Layout';
+import { AppView } from './types';
+import './i18n/translations';
 
-const App = () => {
-  const [currentView, setCurrentView] = useState<AppView>(AppView.LOGIN);
-  const [user, setUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('obsidiana_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+const Dashboard = React.lazy(() => import('./components/Dashboard'));
+const DreamJournal = React.lazy(() => import('./components/DreamJournal'));
+const Chatbot = React.lazy(() => import('./components/Chatbot'));
+const Community = React.lazy(() => import('./components/Community'));
+const Glossary = React.lazy(() => import('./components/Glossary'));
+const UserProfileEdit = React.lazy(() => import('./components/UserProfileEdit'));
+const Agenda = React.lazy(() => import('./components/Agenda'));
+const Messages = React.lazy(() => import('./components/Messages'));
+
+const PageLoader: React.FC = () => (
+  <div className="flex items-center justify-center min-h-[400px]">
+    <LoadingSpinner text="Cargando página..." />
+  </div>
+);
+
+const AppContent: React.FC = () => {
+  const { user, setUser, currentView, setCurrentView, isLoading, isOnline, handleLogout } = useApp();
 
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('obsidiana_user', JSON.stringify(user));
-      // Auto-navigate to Dashboard if user is found but we are on LOGIN
-      if (currentView === AppView.LOGIN) {
-        setCurrentView(AppView.DASHBOARD);
-      }
-    } else {
-      localStorage.removeItem('obsidiana_user');
-    }
-  }, [user, currentView]);
-
-  const handleLogout = async () => {
-    try {
-      await auth.signOut();
-      setUser(null);
-      localStorage.removeItem('obsidiana_user');
+    if (user && currentView === AppView.LOGIN) {
+      setCurrentView(AppView.DASHBOARD);
+    } else if (!user && currentView !== AppView.LOGIN) {
       setCurrentView(AppView.LOGIN);
-    } catch (error) {
-      console.error("Error signing out:", error);
     }
-  };
+  }, [user, currentView, setCurrentView]);
 
-  const handleUpdateUser = (updatedUser: UserProfile) => {
-    setUser(updatedUser);
-  };
+  if (isLoading) {
+    return <LoadingSpinner fullScreen text="Inicializando Obsidiana..." />;
+  }
 
   const renderContent = () => {
     switch (currentView) {
       case AppView.LOGIN:
         return <Login onLogin={setUser} onNavigate={setCurrentView} />;
       case AppView.DASHBOARD:
-        return user ? <Dashboard user={user} /> : null;
+        return user ? (
+          <Suspense fallback={<PageLoader />}>
+            <Dashboard user={user} />
+          </Suspense>
+        ) : null;
       case AppView.DREAMS:
-        return <DreamJournal />;
+        return (
+          <Suspense fallback={<PageLoader />}>
+            <DreamJournal />
+          </Suspense>
+        );
       case AppView.CHATBOT:
-        return <Chatbot />;
+        return (
+          <Suspense fallback={<PageLoader />}>
+            <Chatbot />
+          </Suspense>
+        );
       case AppView.COMMUNITY:
-        return user ? <Community user={user} /> : null;
+        return user ? (
+          <Suspense fallback={<PageLoader />}>
+            <Community user={user} />
+          </Suspense>
+        ) : null;
       case AppView.GLOSSARY:
-        return <Glossary />;
+        return (
+          <Suspense fallback={<PageLoader />}>
+            <Glossary />
+          </Suspense>
+        );
       case AppView.PROFILE:
-        return user ? <UserProfileEdit user={user} onUpdate={handleUpdateUser} /> : null;
+        return user ? (
+          <Suspense fallback={<PageLoader />}>
+            <UserProfileEdit user={user} onUpdate={setUser} />
+          </Suspense>
+        ) : null;
       case AppView.AGENDA:
-        return <Agenda />;
+        return (
+          <Suspense fallback={<PageLoader />}>
+            <Agenda />
+          </Suspense>
+        );
+      case AppView.MESSAGES:
+        return user ? (
+          <Suspense fallback={<PageLoader />}>
+            <Messages user={user} />
+          </Suspense>
+        ) : null;
       default:
-        return user ? <Dashboard user={user} /> : <Login onLogin={setUser} onNavigate={setCurrentView} />;
+        return user ? (
+          <Suspense fallback={<PageLoader />}>
+            <Dashboard user={user} />
+          </Suspense>
+        ) : (
+          <Login onLogin={setUser} onNavigate={setCurrentView} />
+        );
     }
   };
+
+  if (!user && currentView === AppView.LOGIN) {
+    return <Login onLogin={setUser} onNavigate={setCurrentView} />;
+  }
 
   return (
     <Layout
@@ -78,6 +115,17 @@ const App = () => {
     >
       {renderContent()}
     </Layout>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <ErrorBoundary>
+      <AppProvider>
+        <OfflineBanner />
+        <AppContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 };
 

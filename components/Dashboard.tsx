@@ -1,147 +1,29 @@
-
 import React, { useState, useEffect } from 'react';
 import { UserProfile, MiracleQuestion } from '../types';
 import { MIRACLE_QUESTIONS, PHASE_DETAILS } from '../constants';
-import { getMiracleFeedback } from '../services/geminiService';
-import { Sparkles, Droplet, Calendar, Hourglass, RotateCw, MapPin, Send, Loader2, Wand2, Info, ChevronDown, ChevronUp, Zap, Activity, Moon as MoonIcon, FileText, X, Mail } from 'lucide-react';
+import { getMiracleFeedback } from '../services/aiService'; // Ajusta a tu servicio de IA
+import { Sparkles, Droplet, Calendar, Hourglass, RotateCw, MapPin, Send, Loader2, Wand2, Info, ChevronDown, ChevronUp, Zap, Activity, Moon as MoonIcon, FileText, X, ChevronLeft, PenTool } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
+import { getMoonPhaseData, MoonPhaseVisual } from '../utils/moonUtils';
+import { useApp } from '../context/AppContext';
 
 interface DashboardProps {
   user: UserProfile;
 }
 
-// Extracted MoonSVG to avoid re-creation and fix type inference issues
-const MoonSVG = ({ children }: { children: React.ReactNode }) => (
-  <svg viewBox="0 0 100 100" className="w-24 h-24 drop-shadow-lg">
-    <defs>
-      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="4" result="blur" />
-        <feComposite in="SourceGraphic" in2="blur" operator="over" />
-      </filter>
-      <radialGradient id="craterGradient">
-        <stop offset="0%" stopColor="#f8fafc" />
-        <stop offset="100%" stopColor="#cbd5e1" />
-      </radialGradient>
-    </defs>
-    {children}
-  </svg>
-);
-
-// Helper component to draw the moon phase
-const MoonPhaseVisual: React.FC<{ phaseIndex: number }> = ({ phaseIndex }) => {
-  // Phase Index: 0=New, 1=Waxing Crescent, 2=First Quarter, 3=Waxing Gibbous, 4=Full, 5=Waning Gibbous, 6=Last Quarter, 7=Waning Crescent
-
-  // Colors: Dark part #334155 (Slate 700), Light part #f8fafc (Slate 50) with glow
-  switch (phaseIndex) {
-    case 0: // New Moon
-      return <MoonSVG><circle cx="50" cy="50" r="48" fill="#334155" stroke="#475569" strokeWidth="1" /></MoonSVG>;
-    case 1: // Waxing Crescent
-      return (
-        <MoonSVG>
-          <circle cx="50" cy="50" r="48" fill="#334155" />
-          <path d="M50 2 A48 48 0 0 1 50 98 A30 48 0 0 0 50 2" fill="#f8fafc" filter="url(#glow)" />
-        </MoonSVG>
-      );
-    case 2: // First Quarter
-      return (
-        <MoonSVG>
-          <circle cx="50" cy="50" r="48" fill="#334155" />
-          <path d="M50 2 A48 48 0 0 1 50 98 Z" fill="#f8fafc" filter="url(#glow)" />
-        </MoonSVG>
-      );
-    case 3: // Waxing Gibbous
-      return (
-        <MoonSVG>
-          <circle cx="50" cy="50" r="48" fill="#f8fafc" filter="url(#glow)" />
-          <path d="M50 2 A30 48 0 0 1 50 98 A48 48 0 0 1 50 2" fill="#334155" />
-        </MoonSVG>
-      );
-    case 4: // Full Moon
-      return (
-        <MoonSVG>
-          <circle cx="50" cy="50" r="48" fill="#f8fafc" filter="url(#glow)" />
-          <circle cx="50" cy="50" r="48" fill="url(#craterGradient)" opacity="0.2" />
-        </MoonSVG>
-      );
-    case 5: // Waning Gibbous
-      return (
-        <MoonSVG>
-          <circle cx="50" cy="50" r="48" fill="#f8fafc" filter="url(#glow)" />
-          <path d="M50 2 A30 48 0 0 0 50 98 A48 48 0 0 0 50 2" fill="#334155" />
-        </MoonSVG>
-      );
-    case 6: // Last Quarter
-      return (
-        <MoonSVG>
-          <circle cx="50" cy="50" r="48" fill="#334155" />
-          <path d="M50 2 A48 48 0 0 0 50 98 Z" fill="#f8fafc" filter="url(#glow)" />
-        </MoonSVG>
-      );
-    case 7: // Waning Crescent
-      return (
-        <MoonSVG>
-          <circle cx="50" cy="50" r="48" fill="#334155" />
-          <path d="M50 2 A48 48 0 0 0 50 98 A30 48 0 0 1 50 2" fill="#f8fafc" filter="url(#glow)" />
-        </MoonSVG>
-      );
-    default:
-      return <MoonSVG><circle cx="50" cy="50" r="48" fill="#f8fafc" /></MoonSVG>;
-  }
-};
-
-const getMoonPhaseData = (date: Date) => {
-  const synodic = 29.53058867;
-  // Known New Moon: Jan 21, 2023 at 20:53 UTC
-  const knownNewMoon = new Date('2023-01-21T20:53:00Z');
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const diffTime = date.getTime() - knownNewMoon.getTime();
-  const diffDays = diffTime / msPerDay;
-  const phaseCycle = diffDays % synodic;
-
-  // Phase Index (0-7)
-  // New: 0-1.8, WaxCresc: 1.8-5.5, FirstQ: 5.5-9.2, WaxGibb: 9.2-12.9, Full: 12.9-16.6, WanGibb: 16.6-20.3, LastQ: 20.3-24, WanCresc: 24-27.7, New: 27.7-29.5
-  // Simplifying for 8 distinct segments of approx 3.7 days
-  const phaseIndex = Math.floor(((phaseCycle / synodic) * 8)) % 8;
-
-  // Calculate Moon Number of the Year
-  const currentYear = date.getFullYear();
-  const startOfYear = new Date(currentYear, 0, 1);
-  // Calculate how many synodic cycles have passed since the start of the year
-  // We align with the first new moon of the year approx.
-  // Actually, simplest is calculating total moons since known reference, then subtracting moons at start of year.
-  const moonsSinceReference = Math.floor(diffDays / synodic);
-  const daysToStartOfYear = (startOfYear.getTime() - knownNewMoon.getTime()) / msPerDay;
-  const moonsAtStartOfYear = Math.floor(daysToStartOfYear / synodic);
-  const moonNumberOfYear = (moonsSinceReference - moonsAtStartOfYear) + 1;
-
-  let name = '';
-  let desc = '';
-
-  switch (phaseIndex) {
-    case 0: name = 'Luna Nueva'; desc = 'Siembra intenciones'; break;
-    case 1: name = 'Luna Creciente'; desc = 'Visualiza y proyecta'; break;
-    case 2: name = 'Cuarto Creciente'; desc = 'Acción y crecimiento'; break;
-    case 3: name = 'Gibosa Creciente'; desc = 'Perfecciona tu obra'; break;
-    case 4: name = 'Luna Llena'; desc = 'Plenitud y manifestación'; break;
-    case 5: name = 'Gibosa Menguante'; desc = 'Agradece y comparte'; break;
-    case 6: name = 'Cuarto Menguante'; desc = 'Suelta lo que pesa'; break;
-    case 7: name = 'Luna Menguante'; desc = 'Descanso y limpieza'; break;
-    default: name = 'Luna Nueva'; desc = 'Inicio';
-  }
-
-  return { name, desc, phaseIndex, moonNumberOfYear, year: currentYear };
-};
-
-// PREDICTIVE CYCLE CALENDAR COMPONENT
-const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number }> = ({ lastPeriod, cycleLength }) => {
+// COMPONENTE: CALENDARIO PREDICTIVO CON MENÚ RÁPIDO
+const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number, onUpdatePeriod: (date: Date) => void }> = ({ lastPeriod, cycleLength, onUpdatePeriod }) => {
   const [viewDate, setViewDate] = useState(new Date());
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  // Nuevo estado para controlar qué vista del menú estamos viendo ('menu' = acciones rápidas, 'form' = formulario de diario)
+  const [menuView, setMenuView] = useState<'menu' | 'form'>('menu');
+
   const [notes, setNotes] = useState<Record<string, { text: string, mood?: string, pain?: number }>>(() => {
     const saved = localStorage.getItem('obsidiana_calendar_notes');
     if (!saved) return {};
     const parsed = JSON.parse(saved);
-    // Migration check: if string, convert to object
     const migrated: Record<string, { text: string }> = {};
     Object.keys(parsed).forEach(key => {
       if (typeof parsed[key] === 'string') {
@@ -162,7 +44,6 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number }> = ({ la
     const current = notes[dateKey] || { text: '' };
     const newData = { ...current, ...updates };
 
-    // Remove if empty
     if (!newData.text.trim() && !newData.mood && newData.pain === undefined) {
       const newNotes = { ...notes };
       delete newNotes[dateKey];
@@ -172,11 +53,16 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number }> = ({ la
     }
   };
 
+  const handleDayClick = (date: Date) => {
+    setSelectedDate(date);
+    setMenuView('menu'); // Siempre abrimos primero el menú rápido al tocar un día nuevo
+  };
+
   const startOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
   const endOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
 
   const daysInMonth = endOfMonth.getDate();
-  const firstDayOfWeek = startOfMonth.getDay(); // 0 is Sunday
+  const firstDayOfWeek = startOfMonth.getDay();
 
   const calendarDays = [];
   for (let i = 0; i < firstDayOfWeek; i++) {
@@ -200,32 +86,32 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number }> = ({ la
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
   return (
-    <div className={`mt-4 transition-all duration-500 ${isExpanded ? 'bg-white/5 rounded-2xl p-4' : ''}`}>
-      <div className="flex justify-between items-center mb-4">
-        <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Calendario Predictivo</h4>
+    <div className={`mt-6 pt-6 border-t border-gray-100 transition-all duration-500`}>
+      <div className="flex justify-between items-center mb-6">
+        <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-gray-500">Calendario Predictivo</h4>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-1 rounded-md transition-colors"
+          className="text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-md transition-colors font-bold"
         >
-          {isExpanded ? 'CERRAR' : 'AMPLIAR'}
+          {isExpanded ? 'OCULTAR' : 'AMPLIAR'}
         </button>
       </div>
 
       {isExpanded && (
         <div className="animate-fade-in">
-          <div className="flex justify-between items-center mb-4">
-            <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1))} className="p-1 hover:bg-white/10 rounded">
-              <ChevronUp className="-rotate-90" size={16} />
+          <div className="flex justify-between items-center mb-6">
+            <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1))} className="p-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors">
+              <ChevronUp className="-rotate-90" size={18} />
             </button>
-            <span className="text-sm font-bold font-serif">{monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}</span>
-            <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1))} className="p-1 hover:bg-white/10 rounded">
-              <ChevronUp className="rotate-90" size={16} />
+            <span className="text-lg font-bold font-serif text-obsidian-900">{monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}</span>
+            <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1))} className="p-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors">
+              <ChevronUp className="rotate-90" size={18} />
             </button>
           </div>
 
-          <div className="grid grid-cols-7 gap-1 text-center mb-2">
+          <div className="grid grid-cols-7 gap-2 text-center mb-2">
             {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map(d => (
-              <div key={d} className="text-[8px] font-bold text-slate-500">{d}</div>
+              <div key={d} className="text-xs font-bold text-gray-400 mb-2">{d}</div>
             ))}
             {calendarDays.map((date, i) => {
               if (!date) return <div key={`empty-${i}`} />;
@@ -244,100 +130,151 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number }> = ({ la
               return (
                 <button
                   key={i}
-                  onClick={() => setSelectedDate(date)}
-                  className={`relative h-10 flex flex-col items-center justify-center text-[10px] rounded-lg transition-all hover:bg-white/10 ${isToday ? 'ring-2 ring-white ring-inset' : ''} ${isSelected ? 'bg-white/20' : ''}`}
-                  style={{ backgroundColor: bgColor !== 'transparent' ? `${bgColor}33` : 'transparent' }}
+                  onClick={() => handleDayClick(date)}
+                  className={`relative h-12 flex flex-col items-center justify-center text-sm rounded-xl transition-all hover:bg-gray-50 border border-transparent ${isToday ? 'ring-2 ring-obsidian-300 ring-offset-1 font-bold' : ''} ${isSelected ? 'border-obsidian-300 shadow-sm scale-110 z-10 bg-white' : ''}`}
+                  style={{ backgroundColor: bgColor !== 'transparent' ? `${bgColor}15` : 'transparent' }}
                 >
-                  <span className={`${status === 'menstrual' ? 'text-pink-400 font-bold' : 'text-slate-200'} ${isSelected ? 'text-white scale-110' : ''}`}>{date.getDate()}</span>
-                  <div className="flex gap-0.5 mt-0.5">
-                    {status === 'menstrual' && <div className="w-1 h-1 bg-pink-500 rounded-full" />}
-                    {hasNote && <div className="w-1 h-1 bg-amber-400 rounded-full animate-pulse" />}
+                  <span className={`${status === 'menstrual' ? 'text-pink-600 font-bold' : 'text-gray-700'} ${isSelected ? 'text-obsidian-900 font-bold' : ''}`}>{date.getDate()}</span>
+                  <div className="flex gap-1 mt-1">
+                    {status === 'menstrual' && <div className="w-1.5 h-1.5 bg-pink-500 rounded-full" />}
+                    {hasNote && <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />}
                   </div>
                 </button>
               );
             })}
           </div>
 
-          {/* Notes Interface */}
+          {/* INTERFAZ DEL DÍA SELECCIONADO */}
           {selectedDate && (
-            <div className="mt-4 p-4 bg-white/10 rounded-xl border border-white/10 animate-slide-down">
-              <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-2">
-                  <FileText size={14} className="text-amber-400" />
-                  <span className="text-xs font-bold text-slate-200">
-                    Registro: {selectedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-                  </span>
-                </div>
-                <button onClick={() => setSelectedDate(null)} className="text-slate-400 hover:text-white transition-colors">
-                  <X size={14} />
-                </button>
-              </div>
+            <div className="mt-6 p-5 bg-gray-50 rounded-2xl border border-gray-200 animate-slide-down shadow-inner overflow-hidden relative">
 
-              {/* Mood Selection */}
-              <div className="mb-4">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Estado de Ánimo</p>
-                <div className="flex justify-between items-center bg-black/20 p-2 rounded-lg">
-                  {['🧘‍♀️', '✨', '🌪️', '🥀', '🔥'].map(emoji => (
-                    <button
-                      key={emoji}
-                      onClick={() => handleUpdateDayData(selectedDate, { mood: notes[selectedDate.toDateString()]?.mood === emoji ? undefined : emoji })}
-                      className={`text-lg p-1 rounded-md transition-all ${notes[selectedDate.toDateString()]?.mood === emoji ? 'bg-white/20 scale-125' : 'opacity-50 hover:opacity-100'}`}
-                    >
-                      {emoji}
+              {/* VISTA 1: Menú Rápido */}
+              {menuView === 'menu' && (
+                <div className="animate-fade-in">
+                  <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200">
+                    <span className="text-sm font-bold text-gray-800 font-serif">
+                      {selectedDate.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                    </span>
+                    <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-800 transition-colors p-1">
+                      <X size={18} />
                     </button>
-                  ))}
-                </div>
-              </div>
+                  </div>
 
-              {/* Pain Level */}
-              <div className="mb-4">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Nivel de Molestia/Dolor</p>
-                <div className="flex gap-2">
-                  {[0, 1, 2, 3].map(level => (
+                  <div className="space-y-3">
                     <button
-                      key={level}
-                      onClick={() => handleUpdateDayData(selectedDate, { pain: level })}
-                      className={`flex-1 py-1.5 rounded-md text-[10px] font-bold transition-all border ${notes[selectedDate.toDateString()]?.pain === level
-                        ? 'bg-pink-600 border-pink-400 text-white'
-                        : 'bg-black/20 border-white/5 text-slate-400 opacity-60'
-                        }`}
+                      onClick={() => {
+                        onUpdatePeriod(selectedDate);
+                        setSelectedDate(null); // Cerramos tras actualizar
+                      }}
+                      className="w-full flex items-center p-3 rounded-xl bg-white border border-pink-200 hover:bg-pink-50 hover:border-pink-300 transition-all text-pink-700 group"
                     >
-                      {level === 0 ? 'NADA' : level === 1 ? 'LEVE' : level === 2 ? 'MEDIO' : 'FUERTE'}
+                      <div className="bg-pink-100 p-2 rounded-lg group-hover:scale-110 transition-transform mr-3">
+                        <Droplet size={16} className="fill-pink-500" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold text-sm">Día 1 del ciclo</p>
+                        <p className="text-[10px] text-pink-500">Marcar como inicio de menstruación</p>
+                      </div>
                     </button>
-                  ))}
-                </div>
-              </div>
 
-              <textarea
-                value={notes[selectedDate.toDateString()]?.text || ''}
-                onChange={(e) => handleUpdateDayData(selectedDate, { text: e.target.value })}
-                placeholder="Notas sobre el mensaje del cuerpo..."
-                className="w-full bg-black/20 border-none rounded-lg p-3 text-xs text-slate-200 placeholder-slate-500 focus:ring-1 focus:ring-amber-400/50 outline-none resize-none min-h-[60px]"
-              />
-              <p className="text-[8px] text-slate-500 mt-2 italic">Tus registros se guardan en este dispositivo.</p>
+                    <button
+                      onClick={() => setMenuView('form')}
+                      className="w-full flex items-center p-3 rounded-xl bg-white border border-gray-200 hover:bg-obsidian-50 hover:border-obsidian-200 transition-all text-gray-800 group"
+                    >
+                      <div className="bg-obsidian-100 text-obsidian-600 p-2 rounded-lg group-hover:scale-110 transition-transform mr-3">
+                        <PenTool size={16} />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold text-sm">Diario Físico y Emocional</p>
+                        <p className="text-[10px] text-gray-500">Registrar ánimo, molestias y notas</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* VISTA 2: Formulario de Notas Completo */}
+              {menuView === 'form' && (
+                <div className="animate-slide-left">
+                  <div className="flex items-center gap-2 mb-5 pb-3 border-b border-gray-200">
+                    <button onClick={() => setMenuView('menu')} className="text-gray-400 hover:text-obsidian-600 transition-colors bg-white p-1.5 rounded-md shadow-sm border border-gray-200">
+                      <ChevronLeft size={16} />
+                    </button>
+                    <div className="flex items-center gap-2 ml-1">
+                      <FileText size={16} className="text-amber-500" />
+                      <span className="text-sm font-bold text-gray-800">
+                        {selectedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Estado de Ánimo</p>
+                      <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-gray-200 shadow-sm">
+                        {['🧘‍♀️', '✨', '🌪️', '🥀', '🔥'].map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleUpdateDayData(selectedDate, { mood: notes[selectedDate.toDateString()]?.mood === emoji ? undefined : emoji })}
+                            className={`text-xl p-1.5 rounded-lg transition-all ${notes[selectedDate.toDateString()]?.mood === emoji ? 'bg-obsidian-100 scale-125' : 'opacity-50 hover:opacity-100 grayscale hover:grayscale-0'}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Nivel de Molestia/Dolor</p>
+                      <div className="flex gap-2">
+                        {[0, 1, 2, 3].map(level => (
+                          <button
+                            key={level}
+                            onClick={() => handleUpdateDayData(selectedDate, { pain: level })}
+                            className={`flex-1 py-2 rounded-xl text-[10px] font-bold transition-all border shadow-sm ${notes[selectedDate.toDateString()]?.pain === level
+                              ? 'bg-pink-600 border-pink-700 text-white'
+                              : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                              }`}
+                          >
+                            {level === 0 ? 'NADA' : level === 1 ? 'LEVE' : level === 2 ? 'MEDIO' : 'FUERTE'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={notes[selectedDate.toDateString()]?.text || ''}
+                    onChange={(e) => handleUpdateDayData(selectedDate, { text: e.target.value })}
+                    placeholder="Notas sobre el mensaje del cuerpo, la Sombra o tus prácticas de hoy..."
+                    className="w-full bg-white border border-gray-200 rounded-xl p-3 text-sm text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-obsidian-200 outline-none resize-none min-h-[80px] shadow-sm"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-2 font-medium italic text-right">Se guarda automáticamente.</p>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4 pt-4 border-t border-white/10">
+          <div className="flex flex-wrap gap-x-5 gap-y-3 mt-6 pt-4 border-t border-gray-100 justify-center">
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-[#be185d]" />
-              <span className="text-[9px] text-slate-400">Menstruación</span>
+              <div className="w-2.5 h-2.5 rounded-full bg-[#be185d]" />
+              <span className="text-[10px] font-bold text-gray-600 uppercase">Menstruación</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-[#10b981]" />
-              <span className="text-[9px] text-slate-400">Follicular (Creatividad)</span>
+              <div className="w-2.5 h-2.5 rounded-full bg-[#10b981]" />
+              <span className="text-[10px] font-bold text-gray-600 uppercase">Folicular (Creatividad)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-[#0ea5e9]" />
-              <span className="text-[9px] text-slate-400">Ovulación (Plenitud)</span>
+              <div className="w-2.5 h-2.5 rounded-full bg-[#0ea5e9]" />
+              <span className="text-[10px] font-bold text-gray-600 uppercase">Ovulación (Plenitud)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-[#8b5cf6]" />
-              <span className="text-[9px] text-slate-400">Lútea (Intuición)</span>
+              <div className="w-2.5 h-2.5 rounded-full bg-[#8b5cf6]" />
+              <span className="text-[10px] font-bold text-gray-600 uppercase">Lútea (Intuición)</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-amber-400" />
-              <span className="text-[9px] text-slate-400">Día con Nota</span>
+              <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+              <span className="text-[10px] font-bold text-gray-600 uppercase">Día con Nota</span>
             </div>
           </div>
         </div>
@@ -346,15 +283,15 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number }> = ({ la
   );
 };
 
+// DASHBOARD PRINCIPAL
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
+  const { setUser } = useApp();
   const [dailyQuestion, setDailyQuestion] = useState<MiracleQuestion | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // Miracle Question State
   const [answer, setAnswer] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
   const [showPhaseDetails, setShowPhaseDetails] = useState(false);
 
   useEffect(() => {
@@ -364,6 +301,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
   const handleSetToday = () => {
     setCurrentDate(new Date());
+  };
+
+  const handleUpdatePeriodStart = (newDate: Date) => {
+    if (window.confirm(`¿Estás segura de registrar el ${newDate.toLocaleDateString()} como el inicio de tu ciclo menstrual?`)) {
+      const offset = newDate.getTimezoneOffset();
+      const localDate = new Date(newDate.getTime() - (offset * 60 * 1000));
+      const formattedDateLocal = localDate.toISOString().split('T')[0];
+      setUser({ ...user, lastPeriodDate: formattedDateLocal });
+    }
   };
 
   const handleSubmitMiracle = async () => {
@@ -381,7 +327,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     }
   };
 
-  // Biological Calculations
   const lastPeriod = new Date(user.lastPeriodDate);
   const birthDate = new Date(user.birthDate);
 
@@ -424,160 +369,173 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         </div>
       </header>
 
-      {/* Main Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        {/* Cycle Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-obsidian-100 relative overflow-hidden group hover-lift transition-obsidian flex flex-col h-full">
-          <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-            <Droplet size={80} className="text-obsidian-500" />
-          </div>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2 text-obsidian-600">
+        {/* Columna Izquierda */}
+        <div className="md:col-span-2 flex flex-col h-full">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-obsidian-100 relative overflow-hidden flex flex-col h-full group hover-lift transition-obsidian">
+            <div className="absolute right-0 top-0 p-4 opacity-5 pointer-events-none">
+              <Droplet size={120} className="text-obsidian-500" />
+            </div>
+
+            <div className="flex items-center space-x-2 text-obsidian-600 mb-6">
               <Droplet size={20} />
-              <span className="font-bold text-sm uppercase tracking-wider">Ciclo Menstrual</span>
-            </div>
-          </div>
-          <div className="relative z-10 flex-1">
-            <div className="flex items-baseline space-x-1">
-              <span className="text-5xl font-serif font-bold text-obsidian-900">{cycleDay}</span>
-              <span className="text-gray-500 font-medium">/ {user.cycleLength} días</span>
-            </div>
-            <div className="w-full bg-gray-100 h-2.5 rounded-full mt-6 overflow-hidden shadow-inner">
-              <div
-                className="bg-gradient-to-r from-obsidian-300 to-obsidian-600 h-full rounded-full transition-all duration-1000 ease-out"
-                style={{ width: `${cycleProgress}%` }}
-              ></div>
+              <span className="font-bold text-sm uppercase tracking-wider">Ciclo Menstrual y Bio-Ritmo</span>
             </div>
 
-            {/* Phase Logic */}
-            {(() => {
-              let phaseKey: keyof typeof PHASE_DETAILS = 'menstrual';
-              if (cycleDay >= 7 && cycleDay < 14) phaseKey = 'follicular';
-              else if (cycleDay >= 14 && cycleDay < 21) phaseKey = 'ovulatory';
-              else if (cycleDay >= 21) phaseKey = 'luteal';
+            <div className="relative z-10">
+              <div className="flex items-baseline space-x-1">
+                <span className="text-5xl font-serif font-bold text-obsidian-900">{cycleDay}</span>
+                <span className="text-gray-500 font-medium">/ {user.cycleLength} días</span>
+              </div>
 
-              const phase = PHASE_DETAILS[phaseKey];
+              <div className="w-full bg-gray-100 h-3 rounded-full mt-4 overflow-hidden shadow-inner">
+                <div
+                  className="bg-gradient-to-r from-obsidian-300 to-obsidian-600 h-full rounded-full transition-all duration-1000 ease-out"
+                  style={{ width: `${cycleProgress}%` }}
+                ></div>
+              </div>
 
-              return (
-                <div className="mt-5 space-y-4">
-                  <div>
-                    <p className="text-obsidian-800 font-bold flex items-center gap-2">
-                      <Sparkles size={14} className="text-obsidian-400" />
-                      {phase.title}: {phase.archetype}
-                    </p>
-                    <p className="text-sm text-gray-600 italic mt-1 leading-snug">"{phase.summary}"</p>
-                  </div>
+              {/* Botón rápido opcional para registrar periodo hoy */}
+              <button
+                onClick={() => handleUpdatePeriodStart(new Date())}
+                className="mt-5 w-full flex items-center justify-center space-x-2 bg-pink-50 hover:bg-pink-100 text-pink-700 py-3 rounded-xl transition-all border border-pink-100 font-bold active:scale-95"
+              >
+                <Droplet size={16} />
+                <span>Registrar inicio del periodo hoy</span>
+              </button>
 
-                  <button
-                    onClick={() => setShowPhaseDetails(!showPhaseDetails)}
-                    className="flex items-center space-x-1 text-xs font-bold text-obsidian-600 hover:text-obsidian-800 transition-colors uppercase tracking-widest p-1 -ml-1"
-                  >
-                    <span>{showPhaseDetails ? 'Ver menos' : 'Leer recomendaciones'}</span>
-                    {showPhaseDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
+              {(() => {
+                let phaseKey: keyof typeof PHASE_DETAILS = 'menstrual';
+                if (cycleDay >= 7 && cycleDay < 14) phaseKey = 'follicular';
+                else if (cycleDay >= 14 && cycleDay < 21) phaseKey = 'ovulatory';
+                else if (cycleDay >= 21) phaseKey = 'luteal';
 
-                  {showPhaseDetails && (
-                    <div className="animate-slide-down bg-obsidian-50/50 p-4 rounded-xl border border-obsidian-100 mt-2 space-y-4 shadow-inner">
-                      <div className="space-y-2">
-                        <h5 className="text-[10px] font-bold text-obsidian-400 uppercase tracking-widest flex items-center gap-1">
-                          <Info size={10} /> Escucha profunda
-                        </h5>
-                        <p className="text-xs text-slate-700 leading-relaxed font-sans">{phase.description}</p>
-                      </div>
+                const phase = PHASE_DETAILS[phaseKey];
 
-                      <div className="grid grid-cols-2 gap-3 pt-2">
-                        <div className="space-y-1">
-                          <h6 className="text-[10px] font-bold text-obsidian-600 uppercase tracking-tighter flex items-center gap-1">
-                            <Activity size={10} /> Ejercicio
-                          </h6>
-                          <p className="text-[10px] text-slate-600 leading-tight">{phase.recommendations.exercise}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <h6 className="text-[10px] font-bold text-obsidian-600 uppercase tracking-tighter flex items-center gap-1">
-                            <Zap size={10} /> Energía
-                          </h6>
-                          <p className="text-[10px] text-slate-600 leading-tight">{phase.recommendations.energy}</p>
-                        </div>
-                      </div>
-
-                      <div className="pt-2 border-t border-obsidian-100/50">
-                        <h6 className="text-[10px] font-bold text-indigo-500 uppercase tracking-tighter flex items-center gap-1">
-                          <MoonIcon size={10} /> Práctica Sugerida
-                        </h6>
-                        <p className="text-[10px] text-slate-700 font-medium italic mt-0.5">{phase.recommendations.practice}</p>
-                      </div>
+                return (
+                  <div className="mt-5 space-y-4">
+                    <div>
+                      <p className="text-obsidian-800 font-bold flex items-center gap-2 text-lg">
+                        <Sparkles size={16} className="text-obsidian-400" />
+                        {phase.title}: {phase.archetype}
+                      </p>
+                      <p className="text-sm text-gray-600 italic mt-1 leading-relaxed">"{phase.summary}"</p>
                     </div>
-                  )}
-                </div>
-              );
-            })()}
+
+                    <button
+                      onClick={() => setShowPhaseDetails(!showPhaseDetails)}
+                      className="flex items-center space-x-1 text-xs font-bold text-obsidian-600 hover:text-obsidian-800 transition-colors uppercase tracking-widest p-1 -ml-1"
+                    >
+                      <span>{showPhaseDetails ? 'Ver menos' : 'Leer recomendaciones'}</span>
+                      {showPhaseDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+
+                    {showPhaseDetails && (
+                      <div className="animate-slide-down bg-obsidian-50/50 p-4 rounded-xl border border-obsidian-100 mt-2 space-y-4 shadow-inner">
+                        <div className="space-y-2">
+                          <h5 className="text-[10px] font-bold text-obsidian-500 uppercase tracking-widest flex items-center gap-1">
+                            <Info size={12} /> Escucha profunda
+                          </h5>
+                          <p className="text-sm text-gray-700 leading-relaxed font-sans">{phase.description}</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                          <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                            <h6 className="text-[10px] font-bold text-obsidian-600 uppercase tracking-tighter flex items-center gap-1 mb-1">
+                              <Activity size={12} /> Ejercicio
+                            </h6>
+                            <p className="text-xs text-gray-600 leading-tight">{phase.recommendations.exercise}</p>
+                          </div>
+                          <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                            <h6 className="text-[10px] font-bold text-obsidian-600 uppercase tracking-tighter flex items-center gap-1 mb-1">
+                              <Zap size={12} /> Energía
+                            </h6>
+                            <p className="text-xs text-gray-600 leading-tight">{phase.recommendations.energy}</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-obsidian-900 text-white p-4 rounded-lg mt-2 shadow-md">
+                          <h6 className="text-[10px] font-bold text-obsidian-300 uppercase tracking-tighter flex items-center gap-1 mb-1">
+                            <MoonIcon size={12} /> Práctica Sugerida
+                          </h6>
+                          <p className="text-xs font-medium italic">{phase.recommendations.practice}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <CycleCalendar lastPeriod={lastPeriod} cycleLength={user.cycleLength} onUpdatePeriod={handleUpdatePeriodStart} />
+
           </div>
         </div>
 
-        {/* Moon & Calendar Card */}
-        <div className="bg-dark-obsidian text-white p-6 rounded-2xl shadow-lg relative overflow-hidden group hover-lift transition-obsidian flex flex-col h-full min-h-[300px]">
-          <div className="flex justify-between items-start mb-2 relative z-10">
-            <div>
-              <span className="font-bold text-xs uppercase tracking-wider text-slate-400 block mb-1">Fase Lunar</span>
-              <h3 className="text-2xl font-serif font-bold">{moonData.name}</h3>
+        {/* Columna Derecha */}
+        <div className="flex flex-col gap-6 h-full">
+
+          <div className="bg-dark-obsidian text-white p-6 rounded-2xl shadow-lg relative overflow-hidden group hover-lift transition-obsidian flex flex-col">
+            <div className="flex justify-between items-start mb-2 relative z-10">
+              <div>
+                <span className="font-bold text-xs uppercase tracking-wider text-slate-400 block mb-1">Fase Lunar</span>
+                <h3 className="text-2xl font-serif font-bold">{moonData.name}</h3>
+              </div>
+              <div className="-mt-2 -mr-2">
+                <MoonPhaseVisual phaseIndex={moonData.phaseIndex} />
+              </div>
             </div>
-            {/* Dynamic Moon Visual */}
-            <div className="-mt-2 -mr-2">
-              <MoonPhaseVisual phaseIndex={moonData.phaseIndex} />
+
+            <div className="relative z-10 mt-4">
+              <div className="inline-block bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-slate-200 mb-3 border border-white/20">
+                Luna {moonData.moonNumberOfYear} de {moonData.year}
+              </div>
+              <p className="text-slate-300 text-sm">{moonData.desc}</p>
             </div>
           </div>
 
-          <div className="relative z-10 mt-2">
-            <div className="inline-block bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-slate-200 mb-3 border border-white/20">
-              Luna {moonData.moonNumberOfYear} de {moonData.year}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-obsidian-100 relative overflow-hidden group hover-lift transition-obsidian flex-1 flex flex-col justify-center">
+            <div className="absolute right-[-10px] bottom-[-10px] p-4 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
+              <Hourglass size={100} className="text-amber-500" />
             </div>
-            <p className="text-slate-300 text-sm mb-6">{moonData.desc}</p>
+            <div className="flex items-center space-x-2 text-amber-600 mb-4 relative z-10">
+              <Calendar size={20} />
+              <span className="font-bold text-sm uppercase tracking-wider">Reserva Creativa</span>
+            </div>
+            <div className="relative z-10">
+              <div className="flex items-baseline space-x-2">
+                <span className="text-5xl font-serif font-bold text-obsidian-900">{cyclesRemaining}</span>
+                <span className="text-gray-500 font-medium">ciclos lunares</span>
+              </div>
+              <p className="mt-4 text-sm text-gray-600 leading-relaxed border-t border-gray-100 pt-4">
+                Lunas fértiles restantes antes de la plenitud de la menopausia (Sabia).
+              </p>
+            </div>
+          </div>
 
-            {/* Menstrual Calendar Integration */}
-            <CycleCalendar lastPeriod={lastPeriod} cycleLength={user.cycleLength} />
-          </div>
-        </div>
-
-        {/* Egg Countdown Card */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-obsidian-100 relative overflow-hidden group hover-lift transition-obsidian">
-          <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Hourglass size={80} className="text-amber-500" />
-          </div>
-          <div className="flex items-center space-x-2 text-amber-600 mb-4">
-            <Calendar size={20} />
-            <span className="font-bold text-sm uppercase tracking-wider">Reserva Creativa</span>
-          </div>
-          <div className="relative z-10">
-            <span className="text-4xl font-serif font-bold text-obsidian-900">{cyclesRemaining}</span>
-            <span className="text-gray-500 ml-2">ciclos lunares</span>
-            <p className="mt-2 text-sm text-gray-600 leading-relaxed">
-              Lunas fértiles restantes antes de la plenitud de la menopausia (Sabia).
-            </p>
-          </div>
         </div>
       </div>
 
-      {/* Interactive Miracle Question Section */}
       {dailyQuestion && (
-        <div className="bg-gradient-to-r from-obsidian-50 to-white border border-obsidian-200 p-6 md:p-8 rounded-2xl relative shadow-sm">
+        <div className="bg-gradient-to-r from-obsidian-50 to-white border border-obsidian-200 p-6 md:p-8 rounded-2xl relative shadow-sm mt-8">
           <div className="absolute top-0 left-0 bg-obsidian-200 text-obsidian-800 text-xs font-bold px-3 py-1 rounded-br-lg uppercase tracking-wide flex items-center gap-2">
             <Wand2 size={12} /> Pregunta
           </div>
 
           <div className="mt-6 flex flex-col gap-4">
             <div className="flex flex-col md:flex-row gap-4 items-start">
-              <div className="bg-white p-3 rounded-full shadow-sm text-obsidian-500 shrink-0">
+              <div className="bg-white p-3 rounded-full shadow-sm text-obsidian-500 shrink-0 border border-obsidian-100">
                 <Sparkles size={24} />
               </div>
               <div className="flex-1 w-full">
-                <h3 className="text-xl font-serif text-obsidian-900 italic mb-1">"{dailyQuestion.question}"</h3>
+                <h3 className="text-xl font-serif text-obsidian-900 italic mb-1 leading-relaxed">"{dailyQuestion.question}"</h3>
                 <p className="text-sm text-gray-500 font-medium mb-4">Tema: {dailyQuestion.theme}</p>
 
                 {!feedback ? (
-                  <div className="bg-white p-4 rounded-xl border border-obsidian-100 shadow-sm w-full">
+                  <div className="bg-white p-4 rounded-xl border border-obsidian-100 shadow-sm w-full transition-all focus-within:ring-2 focus-within:ring-obsidian-200">
                     <textarea
-                      className="w-full min-h-[80px] bg-white text-gray-900 placeholder-gray-400 outline-none resize-none p-2 rounded-lg"
+                      className="w-full min-h-[80px] bg-white text-gray-900 placeholder-gray-400 outline-none resize-none p-2 rounded-lg text-sm"
                       placeholder="Visualiza tu respuesta aquí. ¿Cómo se ve, se siente o se escucha ese milagro?"
                       value={answer}
                       onChange={(e) => setAnswer(e.target.value)}
@@ -586,7 +544,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                       <button
                         onClick={handleSubmitMiracle}
                         disabled={isSubmitting || !answer.trim()}
-                        className="flex items-center gap-2 bg-obsidian-600 hover:bg-obsidian-700 text-white px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50"
+                        className="flex items-center gap-2 bg-obsidian-600 hover:bg-obsidian-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50 active:scale-95"
                       >
                         {isSubmitting ? (
                           <><Loader2 size={16} className="animate-spin" /> Conectando...</>
@@ -597,24 +555,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     </div>
                   </div>
                 ) : (
-                  <div className="glass p-6 md:p-8 rounded-2xl border border-obsidian-200 shadow-xl animate-fade-in w-full relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-obsidian-100/50 rounded-full -mr-16 -mt-16 blur-3xl opacity-50"></div>
+                  <div className="bg-white p-6 md:p-8 rounded-2xl border border-obsidian-200 shadow-xl animate-fade-in w-full relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-obsidian-100/50 rounded-full -mr-16 -mt-16 blur-3xl opacity-50 pointer-events-none"></div>
                     <div className="relative z-10">
                       <div className="flex justify-between items-center mb-6">
                         <div className="flex items-center gap-2">
-                          <div className="p-2 bg-obsidian-100 rounded-lg text-obsidian-600">
+                          <div className="p-2 bg-obsidian-100 rounded-lg text-obsidian-600 border border-obsidian-200">
                             <Sparkles size={18} />
                           </div>
                           <h4 className="font-serif font-bold text-xl text-obsidian-900">Tu Plan Alquímico</h4>
                         </div>
                         <button
                           onClick={() => { setFeedback(null); setAnswer(''); }}
-                          className="text-xs font-bold text-obsidian-400 hover:text-obsidian-600 uppercase tracking-widest transition-colors"
+                          className="text-xs font-bold text-obsidian-400 hover:text-obsidian-600 uppercase tracking-widest transition-colors bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200"
                         >
                           Nueva Pregunta
                         </button>
                       </div>
-                      <div className="max-w-none text-black">
+                      <div className="max-w-none text-gray-800 prose prose-sm prose-p:leading-relaxed">
                         <MarkdownRenderer content={feedback} />
                       </div>
                     </div>
@@ -625,7 +583,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           </div>
         </div>
       )}
-    </div >
+    </div>
   );
 };
 

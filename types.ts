@@ -58,6 +58,7 @@ export enum AppView {
   GLOSSARY = 'GLOSSARY',
   PROFILE = 'PROFILE',
   AGENDA = 'AGENDA',
+  MESSAGES = 'MESSAGES',
 }
 
 export interface MiracleQuestion {
@@ -72,4 +73,15 @@ export interface AgendaEvent {
   time: string;
   type: 'ritual' | 'medical' | 'practice' | 'other';
   reminderEnabled: boolean;
+}
+
+export interface PrivateMessage {
+  id: string;
+  from: string;
+  fromName: string;
+  to: string;
+  toName: string;
+  content: string;
+  timestamp: string;
+  read: boolean;
 }
