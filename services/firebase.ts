@@ -1,6 +1,5 @@
 import { initializeApp } from "firebase/app";
-// Importamos las herramientas de caché
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+import { getFirestore } from "firebase/firestore"; // <-- Usamos la versión simple
 import { getAuth } from "firebase/auth";
 import { getAnalytics, isSupported } from "firebase/analytics";
 
@@ -14,15 +13,11 @@ const firebaseConfig = {
     measurementId: "G-YMNZYEYL93"
 };
 
-console.log("ID del Proyecto detectado:", firebaseConfig.projectId);
-
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Services con Caché Persistente (Acelerador de carga)
-export const db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-});
+// Initialize Services SIN caché temporalmente
+export const db = getFirestore(app);
 export const auth = getAuth(app);
 
 // Initialize Analytics
