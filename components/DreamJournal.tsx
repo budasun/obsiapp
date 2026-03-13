@@ -1,106 +1,81 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DreamEntry } from '../types';
 import { analyzeDream } from '../services/aiService';
-import { db, auth } from '../services/firebase'; // <-- Conexión a tu nueva base de datos
-import { collection, doc, setDoc, updateDoc, onSnapshot, query, where } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
 import { BookHeart, Send, Loader2, Sparkles, MessageCircle, Plus, ChevronLeft, Moon } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 
 export type ExtendedDreamEntry = DreamEntry & {
   chatHistory?: { id: string; role: 'user' | 'model'; text: string }[];
-  createdAt?: number; // Para ordenar del más nuevo al más viejo
-  userId?: string; // Para que cada usuaria vea solo sus sueños
 };
 
 const DreamJournal: React.FC = () => {
-  const [dreams, setDreams] = useState<ExtendedDreamEntry[]>([]);
-  const [user, setUser] = useState(auth.currentUser);
+  const [dreams, setDreams] = useState<ExtendedDreamEntry[]>(() => {
+    const saved = localStorage.getItem('obsidiana_dreams');
+    if (!saved) return [];
+
+    const parsed: DreamEntry[] = JSON.parse(saved);
+    return parsed.map(dream => {
+      const extDream = dream as ExtendedDreamEntry;
+      if (!extDream.chatHistory) {
+        extDream.chatHistory = extDream.interpretation
+          ? [{ id: `init-${dream.id}`, role: 'model', text: extDream.interpretation }]
+          : [];
+      }
+      return extDream;
+    });
+  });
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(true);
+  const [isCreating, setIsCreating] = useState(false); // NUEVO ESTADO PARA MÓVIL
   const [newDreamText, setNewDreamText] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Rastreamos si la usuaria está logueada
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // 2. Descargamos y sincronizamos los sueños desde la nube en tiempo real
-  useEffect(() => {
-    if (!user) {
-      setDreams([]);
-      return;
-    }
-
-    // Buscamos solo los sueños que pertenezcan a esta usuaria
-    const q = query(collection(db, 'dreams'), where('userId', '==', user.uid));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedDreams: ExtendedDreamEntry[] = [];
-      snapshot.forEach((doc) => {
-        loadedDreams.push({ id: doc.id, ...doc.data() } as ExtendedDreamEntry);
-      });
-
-      // Ordenamos en el cliente para evitar errores de índices en Firebase
-      loadedDreams.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      setDreams(loadedDreams);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
+    localStorage.setItem('obsidiana_dreams', JSON.stringify(dreams));
+  }, [dreams]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [dreams, activeId, isAnalyzing]);
 
-  // 3. Guardar un nuevo sueño directamente en Firebase
   const handleCreateDream = async () => {
-    if (!newDreamText.trim() || !user) return;
+    if (!newDreamText.trim()) return;
 
     setIsAnalyzing(true);
     const newId = Date.now().toString();
     const newEntry: ExtendedDreamEntry = {
       id: newId,
-      userId: user.uid,
       date: new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }),
       content: newDreamText,
       tags: ['Inconsciente'],
-      chatHistory: [],
-      createdAt: Date.now()
+      chatHistory: []
     };
 
-    setIsCreating(false);
-    setNewDreamText('');
+    setDreams(prev => [newEntry, ...prev]);
     setActiveId(newId);
+    setIsCreating(false); // Apagamos modo creación
+    setNewDreamText('');
 
     try {
-      const docRef = doc(db, 'dreams', newId);
-      await setDoc(docRef, newEntry); // Guarda el sueño original
-
       const analysis = await analyzeDream(newEntry.content);
-
-      // Actualiza el documento en la nube con la respuesta de Osiris
-      await updateDoc(docRef, {
-        interpretation: analysis,
-        chatHistory: [{ id: Date.now().toString(), role: 'model', text: analysis }]
-      });
+      setDreams(prev => prev.map(d =>
+        d.id === newId ? {
+          ...d,
+          interpretation: analysis,
+          chatHistory: [{ id: Date.now().toString(), role: 'model', text: analysis }]
+        } : d
+      ));
     } catch (error) {
-      console.error("Error al guardar el sueño en la nube:", error);
+      console.error("Error analyzing dream:", error);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  // 4. Actualizar el chat con Osiris en la nube
   const handleSendFollowUp = async () => {
-    if (!chatInput.trim() || !activeId || !user) return;
+    if (!chatInput.trim() || !activeId) return;
 
     const activeDream = dreams.find(d => d.id === activeId);
     if (!activeDream) return;
@@ -108,23 +83,21 @@ const DreamJournal: React.FC = () => {
     const userMsgId = Date.now().toString();
     const newHistory = [...(activeDream.chatHistory || []), { id: userMsgId, role: 'user' as const, text: chatInput }];
 
+    setDreams(prev => prev.map(d => d.id === activeId ? { ...d, chatHistory: newHistory } : d));
     setChatInput('');
     setIsAnalyzing(true);
 
     try {
-      const docRef = doc(db, 'dreams', activeId);
-      await updateDoc(docRef, { chatHistory: newHistory }); // Sube tu pregunta
-
       const contextPrompt = `Sueño original de la usuaria: "${activeDream.content}"\n\nHistorial de análisis previo:\n${newHistory.map(m => `${m.role === 'user' ? 'Usuaria' : 'Osiris'}: ${m.text}`).join('\n\n')}\n\nPor favor, responde directamente a la última pregunta de la usuaria profundizando en la interpretación del sueño bajo tu rol de Consejera Osiris, experta en arquetipos y la Sombra.`;
 
       const response = await analyzeDream(contextPrompt);
 
-      // Sube la respuesta de la IA
-      await updateDoc(docRef, {
+      setDreams(prev => prev.map(d => d.id === activeId ? {
+        ...d,
         chatHistory: [...newHistory, { id: (Date.now() + 1).toString(), role: 'model', text: response }]
-      });
+      } : d));
     } catch (error) {
-      console.error("Error en el seguimiento:", error);
+      console.error("Error in follow-up:", error);
     } finally {
       setIsAnalyzing(false);
     }
@@ -134,6 +107,7 @@ const DreamJournal: React.FC = () => {
 
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col md:flex-row gap-6 animate-fade-in pb-4">
+
       {/* PANEL IZQUIERDO: Lista de Sueños */}
       <div className={`w-full md:w-1/3 bg-white rounded-3xl shadow-sm border border-obsidian-100 flex flex-col overflow-hidden ${(activeId || isCreating) ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-5 border-b border-obsidian-50 bg-obsidian-50/30 flex justify-between items-center">
@@ -143,7 +117,7 @@ const DreamJournal: React.FC = () => {
           <button
             onClick={() => {
               setActiveId(null);
-              setIsCreating(true);
+              setIsCreating(true); // Encendemos modo creación
             }}
             className="p-2 bg-obsidian-800 hover:bg-black text-white rounded-xl transition-all shadow-md active:scale-95"
             title="Registrar nuevo sueño"
@@ -164,7 +138,7 @@ const DreamJournal: React.FC = () => {
                 key={dream.id}
                 onClick={() => {
                   setActiveId(dream.id);
-                  setIsCreating(false);
+                  setIsCreating(false); // Apagamos modo creación si elegimos un sueño
                 }}
                 className={`w-full text-left p-4 rounded-2xl transition-all border ${activeId === dream.id ? 'bg-obsidian-50 border-obsidian-200 shadow-sm' : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-100'}`}
               >
@@ -183,10 +157,13 @@ const DreamJournal: React.FC = () => {
         </div>
       </div>
 
-      {/* PANEL DERECHO: Vista Activa */}
+      {/* PANEL DERECHO: Vista Activa (Nuevo Sueño o Chat) */}
       <div className={`w-full md:w-2/3 bg-white rounded-3xl shadow-sm border border-obsidian-100 flex flex-col overflow-hidden ${!(activeId || isCreating) ? 'hidden md:flex' : 'flex'}`}>
+
+        {/* ESTADO A: Redactar Nuevo Sueño */}
         {!activeId ? (
           <div className="flex-1 flex flex-col h-full">
+            {/* Header Móvil para cancelar y regresar a la lista */}
             <div className="md:hidden flex items-center p-4 border-b border-gray-100 bg-white">
               <button onClick={() => setIsCreating(false)} className="p-2 text-gray-500 hover:bg-gray-50 rounded-lg mr-2">
                 <ChevronLeft size={24} />
@@ -227,6 +204,8 @@ const DreamJournal: React.FC = () => {
             </div>
           </div>
         ) : (
+
+          /* ESTADO B: Vista de Chat del Sueño Activo */
           <div className="flex flex-col h-full bg-gray-50/30">
             <div className="md:hidden flex items-center p-4 border-b border-gray-100 bg-white">
               <button onClick={() => setActiveId(null)} className="p-2 text-gray-500 hover:bg-gray-50 rounded-lg mr-2">
