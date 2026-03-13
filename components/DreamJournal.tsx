@@ -26,7 +26,7 @@ const DreamJournal: React.FC = () => {
   });
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false); // NUEVO ESTADO PARA MÓVIL
+  const [isCreating, setIsCreating] = useState(true); // Inicia en true para mostrar formulario en móvil
   const [newDreamText, setNewDreamText] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);

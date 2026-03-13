@@ -17,10 +17,10 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number, onUpdateP
   const [isExpanded, setIsExpanded] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
-  // Nuevo estado para controlar qué vista del menú estamos viendo ('menu' = acciones rápidas, 'form' = formulario de diario)
+  // Estado para controlar qué vista del modal estamos viendo ('menu' = acciones rápidas, 'form' = formulario de diario)
   const [menuView, setMenuView] = useState<'menu' | 'form'>('menu');
 
-  const [notes, setNotes] = useState<Record<string, { text: string, mood?: string, pain?: number }>>(() => {
+  const [notes, setNotes] = useState<Record<string, { text: string, mood?: string, pain?: number, hasFlow?: boolean }>>(() => {
     const saved = localStorage.getItem('obsidiana_calendar_notes');
     if (!saved) return {};
     const parsed = JSON.parse(saved);
@@ -39,12 +39,12 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number, onUpdateP
     localStorage.setItem('obsidiana_calendar_notes', JSON.stringify(notes));
   }, [notes]);
 
-  const handleUpdateDayData = (date: Date, updates: Partial<{ text: string, mood: string, pain: number }>) => {
+  const handleUpdateDayData = (date: Date, updates: Partial<{ text: string, mood: string, pain: number, hasFlow: boolean }>) => {
     const dateKey = date.toDateString();
     const current = notes[dateKey] || { text: '' };
     const newData = { ...current, ...updates };
 
-    if (!newData.text.trim() && !newData.mood && newData.pain === undefined) {
+    if (!newData.text.trim() && !newData.mood && newData.pain === undefined && newData.hasFlow === undefined) {
       const newNotes = { ...notes };
       delete newNotes[dateKey];
       setNotes(newNotes);
@@ -55,7 +55,13 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number, onUpdateP
 
   const handleDayClick = (date: Date) => {
     setSelectedDate(date);
-    setMenuView('menu'); // Siempre abrimos primero el menú rápido al tocar un día nuevo
+    const dateKey = date.toDateString();
+    const existingData = notes[dateKey];
+
+    // Si ya existe texto, ánimo o dolor, abrimos directamente el formulario de la nota
+    const hasActualNote = existingData && (existingData.text || existingData.mood || existingData.pain !== undefined);
+
+    setMenuView(hasActualNote ? 'form' : 'menu');
   };
 
   const startOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
@@ -74,10 +80,30 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number, onUpdateP
 
   const getDayStatus = (date: Date) => {
     if (!date) return null;
-    const diffDays = Math.floor((date.getTime() - lastPeriod.getTime()) / (1000 * 60 * 60 * 24));
+    const diffTime = date.getTime() - lastPeriod.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     const cycleDay = ((diffDays % cycleLength) + cycleLength) % cycleLength + 1;
+    const dateKey = date.toDateString();
+    const manualFlow = notes[dateKey]?.hasFlow;
 
-    if (cycleDay <= 6) return 'menstrual';
+    if (manualFlow === true) return 'menstrual';
+
+    if (cycleDay <= 6) {
+      if (manualFlow === false) return 'follicular';
+
+      let endedEarly = false;
+      for (let i = 1; i < cycleDay; i++) {
+        const pastDate = new Date(date.getTime() - ((cycleDay - i) * 24 * 60 * 60 * 1000));
+        if (notes[pastDate.toDateString()]?.hasFlow === false) {
+          endedEarly = true;
+          break;
+        }
+      }
+
+      if (endedEarly) return 'follicular';
+      return 'menstrual';
+    }
+
     if (cycleDay >= 7 && cycleDay <= 13) return 'follicular';
     if (cycleDay >= 14 && cycleDay <= 20) return 'ovulatory';
     return 'luteal';
@@ -118,7 +144,10 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number, onUpdateP
               const status = getDayStatus(date);
               const isToday = date.toDateString() === new Date().toDateString();
               const dateKey = date.toDateString();
-              const hasNote = !!notes[dateKey];
+              const noteData = notes[dateKey];
+
+              // Solo mostramos el punto amarillo si hay texto, ánimo o dolor (no si solo ajustó el sangrado)
+              const hasNote = noteData && (noteData.text || noteData.mood || noteData.pain !== undefined);
               const isSelected = selectedDate?.toDateString() === dateKey;
 
               let bgColor = 'transparent';
@@ -144,114 +173,166 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number, onUpdateP
             })}
           </div>
 
-          {/* INTERFAZ DEL DÍA SELECCIONADO */}
+          {/* POPUP / MODAL DEL DÍA SELECCIONADO */}
           {selectedDate && (
-            <div className="mt-6 p-5 bg-gray-50 rounded-2xl border border-gray-200 animate-slide-down shadow-inner overflow-hidden relative">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-obsidian-900/40 backdrop-blur-sm animate-fade-in">
+              <div className="bg-gray-50 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden relative max-h-[90vh] flex flex-col border border-gray-200">
 
-              {/* VISTA 1: Menú Rápido */}
-              {menuView === 'menu' && (
-                <div className="animate-fade-in">
-                  <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200">
-                    <span className="text-sm font-bold text-gray-800 font-serif">
-                      {selectedDate.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                    </span>
-                    <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-800 transition-colors p-1">
-                      <X size={18} />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => {
-                        onUpdatePeriod(selectedDate);
-                        setSelectedDate(null); // Cerramos tras actualizar
-                      }}
-                      className="w-full flex items-center p-3 rounded-xl bg-white border border-pink-200 hover:bg-pink-50 hover:border-pink-300 transition-all text-pink-700 group"
-                    >
-                      <div className="bg-pink-100 p-2 rounded-lg group-hover:scale-110 transition-transform mr-3">
-                        <Droplet size={16} className="fill-pink-500" />
+                <div className="p-6 overflow-y-auto">
+                  {/* VISTA 1: Menú Rápido */}
+                  {menuView === 'menu' && (
+                    <div className="animate-fade-in">
+                      <div className="flex justify-between items-center mb-5 pb-3 border-b border-gray-200">
+                        <span className="text-sm font-bold text-gray-800 font-serif capitalize">
+                          {selectedDate.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                        </span>
+                        <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-800 transition-colors p-1 bg-white rounded-md shadow-sm border border-gray-100">
+                          <X size={18} />
+                        </button>
                       </div>
-                      <div className="text-left">
-                        <p className="font-bold text-sm">Día 1 del ciclo</p>
-                        <p className="text-[10px] text-pink-500">Marcar como inicio de menstruación</p>
-                      </div>
-                    </button>
 
-                    <button
-                      onClick={() => setMenuView('form')}
-                      className="w-full flex items-center p-3 rounded-xl bg-white border border-gray-200 hover:bg-obsidian-50 hover:border-obsidian-200 transition-all text-gray-800 group"
-                    >
-                      <div className="bg-obsidian-100 text-obsidian-600 p-2 rounded-lg group-hover:scale-110 transition-transform mr-3">
-                        <PenTool size={16} />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-bold text-sm">Diario Físico y Emocional</p>
-                        <p className="text-[10px] text-gray-500">Registrar ánimo, molestias y notas</p>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              )}
+                      <div className="space-y-3">
+                        <button
+                          onClick={() => {
+                            onUpdatePeriod(selectedDate);
+                            setSelectedDate(null);
+                          }}
+                          className="w-full flex items-center p-3 rounded-xl bg-white border border-pink-200 hover:bg-pink-50 hover:border-pink-300 transition-all text-pink-700 group shadow-sm"
+                        >
+                          <div className="bg-pink-100 p-2 rounded-lg group-hover:scale-110 transition-transform mr-3">
+                            <Droplet size={16} className="fill-pink-500" />
+                          </div>
+                          <div className="text-left">
+                            <p className="font-bold text-sm">Día 1 del ciclo</p>
+                            <p className="text-[10px] text-pink-500">Marcar como inicio de menstruación</p>
+                          </div>
+                        </button>
 
-              {/* VISTA 2: Formulario de Notas Completo */}
-              {menuView === 'form' && (
-                <div className="animate-slide-left">
-                  <div className="flex items-center gap-2 mb-5 pb-3 border-b border-gray-200">
-                    <button onClick={() => setMenuView('menu')} className="text-gray-400 hover:text-obsidian-600 transition-colors bg-white p-1.5 rounded-md shadow-sm border border-gray-200">
-                      <ChevronLeft size={16} />
-                    </button>
-                    <div className="flex items-center gap-2 ml-1">
-                      <FileText size={16} className="text-amber-500" />
-                      <span className="text-sm font-bold text-gray-800">
-                        {selectedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Estado de Ánimo</p>
-                      <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-gray-200 shadow-sm">
-                        {['🧘‍♀️', '✨', '🌪️', '🥀', '🔥'].map(emoji => (
+                        {getDayStatus(selectedDate) === 'menstrual' ? (
                           <button
-                            key={emoji}
-                            onClick={() => handleUpdateDayData(selectedDate, { mood: notes[selectedDate.toDateString()]?.mood === emoji ? undefined : emoji })}
-                            className={`text-xl p-1.5 rounded-lg transition-all ${notes[selectedDate.toDateString()]?.mood === emoji ? 'bg-obsidian-100 scale-125' : 'opacity-50 hover:opacity-100 grayscale hover:grayscale-0'}`}
+                            onClick={() => {
+                              handleUpdateDayData(selectedDate, { hasFlow: false });
+                              setSelectedDate(null);
+                            }}
+                            className="w-full flex items-center p-3 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 transition-all text-gray-700 group shadow-sm"
                           >
-                            {emoji}
+                            <div className="bg-gray-100 p-2 rounded-lg group-hover:scale-110 transition-transform mr-3 text-gray-500">
+                              <X size={16} />
+                            </div>
+                            <div className="text-left">
+                              <p className="font-bold text-sm">Fin de menstruación</p>
+                              <p className="text-[10px] text-gray-500">Marcar que el sangrado ya terminó</p>
+                            </div>
                           </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Nivel de Molestia/Dolor</p>
-                      <div className="flex gap-2">
-                        {[0, 1, 2, 3].map(level => (
+                        ) : (
                           <button
-                            key={level}
-                            onClick={() => handleUpdateDayData(selectedDate, { pain: level })}
-                            className={`flex-1 py-2 rounded-xl text-[10px] font-bold transition-all border shadow-sm ${notes[selectedDate.toDateString()]?.pain === level
-                              ? 'bg-pink-600 border-pink-700 text-white'
-                              : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-                              }`}
+                            onClick={() => {
+                              handleUpdateDayData(selectedDate, { hasFlow: true });
+                              setSelectedDate(null);
+                            }}
+                            className="w-full flex items-center p-3 rounded-xl bg-white border border-pink-200 hover:bg-pink-50 transition-all text-pink-700 group shadow-sm"
                           >
-                            {level === 0 ? 'NADA' : level === 1 ? 'LEVE' : level === 2 ? 'MEDIO' : 'FUERTE'}
+                            <div className="bg-pink-100 p-2 rounded-lg group-hover:scale-110 transition-transform mr-3">
+                              <Droplet size={16} className="fill-pink-500 opacity-70" />
+                            </div>
+                            <div className="text-left">
+                              <p className="font-bold text-sm">Registrar sangrado extra</p>
+                              <p className="text-[10px] text-pink-500">Tu regla se extendió o adelantó</p>
+                            </div>
                           </button>
-                        ))}
+                        )}
+
+                        <button
+                          onClick={() => setMenuView('form')}
+                          className="w-full flex items-center p-3 rounded-xl bg-white border border-gray-200 hover:bg-obsidian-50 hover:border-obsidian-200 transition-all text-gray-800 group shadow-sm"
+                        >
+                          <div className="bg-obsidian-100 text-obsidian-600 p-2 rounded-lg group-hover:scale-110 transition-transform mr-3">
+                            <PenTool size={16} />
+                          </div>
+                          <div className="text-left">
+                            <p className="font-bold text-sm">Diario Físico y Emocional</p>
+                            <p className="text-[10px] text-gray-500">Registrar ánimo, molestias y notas</p>
+                          </div>
+                        </button>
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  <textarea
-                    value={notes[selectedDate.toDateString()]?.text || ''}
-                    onChange={(e) => handleUpdateDayData(selectedDate, { text: e.target.value })}
-                    placeholder="Notas sobre el mensaje del cuerpo, la Sombra o tus prácticas de hoy..."
-                    className="w-full bg-white border border-gray-200 rounded-xl p-3 text-sm text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-obsidian-200 outline-none resize-none min-h-[80px] shadow-sm"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-2 font-medium italic text-right">Se guarda automáticamente.</p>
+                  {/* VISTA 2: Formulario de Notas Completo */}
+                  {menuView === 'form' && (
+                    <div className="animate-slide-left">
+                      <div className="flex items-center justify-between mb-5 pb-3 border-b border-gray-200">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => setMenuView('menu')} className="text-gray-400 hover:text-obsidian-600 transition-colors bg-white p-1.5 rounded-md shadow-sm border border-gray-200">
+                            <ChevronLeft size={16} />
+                          </button>
+                          <div className="flex items-center gap-2 ml-1">
+                            <FileText size={16} className="text-amber-500" />
+                            <span className="text-sm font-bold text-gray-800 capitalize">
+                              {selectedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}
+                            </span>
+                          </div>
+                        </div>
+                        <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-800 transition-colors p-1 bg-white rounded-md shadow-sm border border-gray-100">
+                          <X size={18} />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-6 mb-5">
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Estado de Ánimo</p>
+                          <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-gray-200 shadow-sm">
+                            {['🧘‍♀️', '✨', '🌪️', '🥀', '🔥'].map(emoji => (
+                              <button
+                                key={emoji}
+                                onClick={() => handleUpdateDayData(selectedDate, { mood: notes[selectedDate.toDateString()]?.mood === emoji ? undefined : emoji })}
+                                className={`text-xl p-2 rounded-lg transition-all ${notes[selectedDate.toDateString()]?.mood === emoji ? 'bg-obsidian-100 scale-125' : 'opacity-50 hover:opacity-100 grayscale hover:grayscale-0'}`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Nivel de Molestia/Dolor</p>
+                          <div className="flex gap-2">
+                            {[0, 1, 2, 3].map(level => (
+                              <button
+                                key={level}
+                                onClick={() => handleUpdateDayData(selectedDate, { pain: level })}
+                                className={`flex-1 py-3 rounded-xl text-[10px] font-bold transition-all border shadow-sm ${notes[selectedDate.toDateString()]?.pain === level
+                                  ? 'bg-pink-600 border-pink-700 text-white'
+                                  : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                                  }`}
+                              >
+                                {level === 0 ? 'NADA' : level === 1 ? 'LEVE' : level === 2 ? 'MEDIO' : 'FUERTE'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <textarea
+                        value={notes[selectedDate.toDateString()]?.text || ''}
+                        onChange={(e) => handleUpdateDayData(selectedDate, { text: e.target.value })}
+                        placeholder="Notas sobre el mensaje del cuerpo, la Sombra o tus prácticas de hoy..."
+                        className="w-full bg-white border border-gray-200 rounded-xl p-4 text-sm text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-obsidian-200 outline-none resize-none min-h-[120px] shadow-sm"
+                      />
+
+                      <div className="flex justify-between items-center mt-4">
+                        <p className="text-[10px] text-gray-400 font-medium italic">Se guarda automáticamente.</p>
+                        <button
+                          onClick={() => setSelectedDate(null)}
+                          className="text-xs bg-obsidian-800 text-white px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-black active:scale-95 transition-all"
+                        >
+                          Listo
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -396,7 +477,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                 ></div>
               </div>
 
-              {/* Botón rápido opcional para registrar periodo hoy */}
               <button
                 onClick={() => handleUpdatePeriodStart(new Date())}
                 className="mt-5 w-full flex items-center justify-center space-x-2 bg-pink-50 hover:bg-pink-100 text-pink-700 py-3 rounded-xl transition-all border border-pink-100 font-bold active:scale-95"
