@@ -67,7 +67,7 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
     });
 
     useEffect(() => {
-        // TEMPORIZADOR ANTI-CUELGUES: Máximo 2.5 segundos de carga. Si Firebase tarda, forzamos mostrar el muro.
+        // TEMPORIZADOR ANTI-CUELGUES: Máximo 2.5 segundos de carga.
         const fallbackTimer = setTimeout(() => {
             if (loading) setLoading(false);
         }, 2500);
@@ -79,7 +79,7 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            clearTimeout(fallbackTimer); // Cancelamos el temporizador si Firebase responde rápido
+            clearTimeout(fallbackTimer);
 
             const postsData = snapshot.docs.map(docData => {
                 const data = docData.data();
@@ -105,9 +105,10 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
 
             setIsFirebaseConnected(true);
 
+            // Mezclamos posts reales de Firebase con locales (evitando duplicados)
             const localPosts = loadLocalPosts();
             const mockIds = MOCK_COMMUNITY_POSTS.map(p => p.id);
-            const localUserPosts = localPosts.filter(p => p.id.length < 15 || mockIds.includes(p.id));
+            const localUserPosts = localPosts.filter(p => p.id.startsWith('local_') || mockIds.includes(p.id));
 
             const combinedPosts = postsData.length > 0
                 ? [...postsData, ...localUserPosts.filter(lp => !postsData.some(fp => fp.id === lp.id))]
@@ -131,7 +132,7 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
             clearTimeout(fallbackTimer);
             unsubscribe();
         };
-    }, [loading]);
+    }, []); // Quitamos loading de dependencias para evitar bucles
 
     useEffect(() => {
         localStorage.setItem('obsidiana_reactions', JSON.stringify(userReactions));
@@ -139,42 +140,43 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
 
     const handleReaction = async (postId: string, emoji: string) => {
         const previousReaction = userReactions[postId];
+        const isLocal = postId.startsWith('local_') || postId.length < 15;
 
-        if (postId.length < 15) {
-            setPosts(posts.map(post => {
-                if (post.id === postId) {
-                    let newLikes = post.likes;
-                    if (previousReaction === emoji) {
-                        newLikes--;
-                        const nextReactions = { ...userReactions };
-                        delete nextReactions[postId];
-                        setUserReactions(nextReactions);
-                    } else {
-                        if (!previousReaction) newLikes++;
-                        setUserReactions({ ...userReactions, [postId]: emoji });
-                    }
-                    return { ...post, likes: newLikes };
+        // Actualización Optimista en UI
+        setPosts(prevPosts => prevPosts.map(post => {
+            if (post.id === postId) {
+                let newLikes = post.likes;
+                if (previousReaction === emoji) {
+                    newLikes = Math.max(0, newLikes - 1);
+                } else if (!previousReaction) {
+                    newLikes++;
                 }
-                return post;
-            }));
-            return;
+                return { ...post, likes: newLikes };
+            }
+            return post;
+        }));
+
+        // Actualizar estado de reacciones
+        if (previousReaction === emoji) {
+            const nextReactions = { ...userReactions };
+            delete nextReactions[postId];
+            setUserReactions(nextReactions);
+        } else {
+            setUserReactions({ ...userReactions, [postId]: emoji });
         }
 
-        const postRef = doc(db, 'posts', postId);
-        try {
-            if (previousReaction === emoji) {
-                await updateDoc(postRef, { likes: increment(-1) });
-                const nextReactions = { ...userReactions };
-                delete nextReactions[postId];
-                setUserReactions(nextReactions);
-            } else {
-                await updateDoc(postRef, {
-                    likes: previousReaction ? increment(0) : increment(1)
-                });
-                setUserReactions({ ...userReactions, [postId]: emoji });
+        // Si no es local, enviar a Firebase
+        if (!isLocal) {
+            const postRef = doc(db, 'posts', postId);
+            try {
+                if (previousReaction === emoji) {
+                    await updateDoc(postRef, { likes: increment(-1) });
+                } else if (!previousReaction) {
+                    await updateDoc(postRef, { likes: increment(1) });
+                }
+            } catch (error) {
+                console.error("Error updating reaction en Firebase:", error);
             }
-        } catch (error) {
-            console.error("Error updating reaction en Firebase:", error);
         }
     };
 
@@ -193,17 +195,16 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
             comments: []
         };
 
-        const updatedPosts = [newPost, ...posts];
-        setPosts(updatedPosts);
-        saveLocalPosts(updatedPosts);
+        // UI Instantánea
+        setPosts(prev => [newPost, ...prev]);
         setNewPostContent('');
         setSelectedTag('General');
 
         try {
             await addDoc(collection(db, 'posts'), {
                 author: user.name,
-                content: newPostContent.trim(),
-                tags: [selectedTag],
+                content: newPost.content,
+                tags: newPost.tags,
                 likes: 0,
                 timestamp: serverTimestamp(),
                 comments: []
@@ -223,6 +224,7 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
             timestamp: new Intl.DateTimeFormat('es-ES', { timeStyle: 'short' }).format(new Date())
         };
 
+        // Actualización local
         const updatedPosts = posts.map(post => {
             if (post.id === postId) {
                 return { ...post, comments: [...post.comments, comment] };
@@ -233,16 +235,12 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
         saveLocalPosts(updatedPosts);
         setNewComment('');
 
-        if (postId.length >= 15 && !postId.startsWith('local_')) {
+        // Firebase si no es local
+        if (!postId.startsWith('local_') && postId.length >= 15) {
             try {
                 const postRef = doc(db, 'posts', postId);
                 await updateDoc(postRef, {
-                    comments: arrayUnion({
-                        id: comment.id,
-                        author: comment.author,
-                        content: comment.content,
-                        timestamp: comment.timestamp
-                    })
+                    comments: arrayUnion(comment)
                 });
             } catch (error) {
                 console.error("Error adding comment a Firebase:", error);
@@ -274,8 +272,8 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
             setDmMessage('');
             alert(`Mensaje enviado a ${dmRecipient} con éxito.`);
         } catch (error) {
-            console.error("Error enviando DM desde el muro:", error);
-            alert("No se pudo enviar el mensaje en este momento.");
+            console.error("Error enviando DM:", error);
+            alert("No se pudo enviar el mensaje.");
         } finally {
             setIsSendingDM(false);
         }
@@ -294,11 +292,12 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
                 {!isFirebaseConnected && !loading && (
                     <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-yellow-50 border border-yellow-200 rounded-full text-xs text-yellow-700">
                         <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
-                        Modo offline - Tus comentarios se guardarán localmente
+                        Modo offline - Conectando...
                     </div>
                 )}
             </header>
 
+            {/* Formulario de Post */}
             <div className="bg-white p-6 rounded-3xl shadow-xl border border-obsidian-100 transform transition-all hover:shadow-2xl">
                 <form onSubmit={handleAddPost} className="space-y-4">
                     <div className="flex items-center space-x-3 mb-2">
@@ -360,7 +359,6 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
                                     <div
                                         className={`flex items-center space-x-3 transition-all ${post.author !== user.name ? 'cursor-pointer group' : ''}`}
                                         onClick={() => post.author !== user.name && setDmRecipient(post.author)}
-                                        title={post.author !== user.name ? `Enviar mensaje privado a ${post.author}` : ''}
                                     >
                                         <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-obsidian-400 to-obsidian-600 flex items-center justify-center text-white font-bold text-lg shadow-inner ring-2 ring-white overflow-hidden transition-all ${post.author !== user.name ? 'group-hover:ring-obsidian-200 group-hover:scale-105' : ''}`}>
                                             {post.author.charAt(0)}
@@ -422,42 +420,33 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
                                                 <div
                                                     className={`w-8 h-8 rounded-full bg-white border flex items-center justify-center text-xs font-bold shadow-sm shrink-0 transition-all ${comment.author !== user.name ? 'border-obsidian-200 text-obsidian-600 cursor-pointer hover:bg-obsidian-50 hover:scale-110' : 'border-gray-200 text-obsidian-500'}`}
                                                     onClick={() => comment.author !== user.name && setDmRecipient(comment.author)}
-                                                    title={comment.author !== user.name ? `Enviar mensaje privado a ${comment.author}` : ''}
                                                 >
                                                     {comment.author.charAt(0)}
                                                 </div>
-                                                <div className="flex-1 bg-white p-4 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                                                <div className="flex-1 bg-white p-4 rounded-2xl rounded-tl-none shadow-sm border border-gray-100">
                                                     <div className="flex justify-between items-center mb-1">
-                                                        <span
-                                                            className={`text-xs font-bold transition-colors ${comment.author !== user.name ? 'text-obsidian-800 cursor-pointer hover:text-obsidian-600' : 'text-obsidian-900'}`}
-                                                            onClick={() => comment.author !== user.name && setDmRecipient(comment.author)}
-                                                        >
-                                                            {comment.author}
-                                                        </span>
-                                                        <span className="text-[10px] text-gray-400 uppercase tracking-tighter">{comment.timestamp}</span>
+                                                        <span className="text-xs font-bold text-obsidian-800">{comment.author}</span>
+                                                        <span className="text-[10px] text-gray-400 uppercase">{comment.timestamp}</span>
                                                     </div>
-                                                    <p className="text-sm text-gray-800 leading-relaxed font-sans">{comment.content}</p>
+                                                    <p className="text-sm text-gray-800 font-sans">{comment.content}</p>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
 
                                     <div className="flex items-center space-x-3 bg-white p-2 rounded-2xl shadow-inner border border-gray-200">
-                                        <div className="w-8 h-8 rounded-full bg-obsidian-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 overflow-hidden">
-                                            {user.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : user.name.charAt(0)}
-                                        </div>
                                         <input
                                             type="text"
                                             value={newComment}
                                             onChange={(e) => setNewComment(e.target.value)}
                                             onKeyPress={(e) => e.key === 'Enter' && handleAddComment(post.id)}
                                             placeholder="Escribe un mensaje de apoyo..."
-                                            className="flex-1 bg-transparent border-none focus:outline-none text-sm text-gray-900 placeholder-gray-400 px-2"
+                                            className="flex-1 bg-transparent border-none focus:outline-none text-sm text-gray-900 px-2"
                                         />
                                         <button
                                             onClick={() => handleAddComment(post.id)}
                                             disabled={!newComment.trim()}
-                                            className="bg-obsidian-900 text-white p-2.5 rounded-xl hover:bg-black disabled:opacity-50 transition-all active:scale-90"
+                                            className="bg-obsidian-900 text-white p-2.5 rounded-xl hover:bg-black transition-all"
                                         >
                                             <Send size={16} />
                                         </button>
@@ -469,49 +458,36 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
                 </div>
             )}
 
+            {/* Modal de DM */}
             {dmRecipient && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-obsidian-900/60 backdrop-blur-sm animate-fade-in">
-                    <div
-                        className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl transform animate-slide-up border border-obsidian-100"
-                        onClick={(e) => e.stopPropagation()}
-                    >
+                    <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl border border-obsidian-100" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-6">
                             <div className="flex items-center gap-3">
                                 <div className="p-2.5 bg-obsidian-50 text-obsidian-600 rounded-xl">
                                     <Mail size={20} />
                                 </div>
-                                <div>
-                                    <h3 className="font-serif font-bold text-lg text-gray-900 leading-tight">Conectar con {dmRecipient}</h3>
-                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Buzón Privado</p>
-                                </div>
+                                <h3 className="font-serif font-bold text-lg text-gray-900">Conectar con {dmRecipient}</h3>
                             </div>
-                            <button
-                                onClick={() => { setDmRecipient(null); setDmMessage(''); }}
-                                className="p-2 bg-gray-50 rounded-full text-gray-500 hover:text-gray-900 hover:bg-gray-200 transition-all active:scale-95"
-                            >
+                            <button onClick={() => { setDmRecipient(null); setDmMessage(''); }} className="p-2 bg-gray-50 rounded-full text-gray-500">
                                 <X size={18} />
                             </button>
                         </div>
-
                         <form onSubmit={handleSendDirectMessage}>
                             <textarea
                                 value={dmMessage}
                                 onChange={(e) => setDmMessage(e.target.value)}
-                                placeholder={`Escribe un mensaje privado y sagrado para ${dmRecipient}...`}
-                                className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-obsidian-200 min-h-[120px] resize-none transition-all mb-4"
+                                placeholder="Escribe un mensaje sagrado..."
+                                className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 min-h-[120px] mb-4 focus:ring-2 focus:ring-obsidian-200 outline-none"
                                 autoFocus
                             />
-
                             <button
                                 type="submit"
                                 disabled={!dmMessage.trim() || isSendingDM}
-                                className="w-full flex items-center justify-center space-x-2 bg-obsidian-800 hover:bg-black text-white px-6 py-3.5 rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50 font-bold"
+                                className="w-full flex items-center justify-center space-x-2 bg-obsidian-800 text-white px-6 py-3.5 rounded-xl font-bold disabled:opacity-50"
                             >
-                                {isSendingDM ? (
-                                    <><Loader2 size={18} className="animate-spin" /> <span>Enviando...</span></>
-                                ) : (
-                                    <><Send size={18} /> <span>Enviar Mensaje</span></>
-                                )}
+                                {isSendingDM ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                                <span>{isSendingDM ? 'Enviando...' : 'Enviar Mensaje'}</span>
                             </button>
                         </form>
                     </div>
