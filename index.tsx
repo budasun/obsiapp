@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import OfflineBanner from './components/OfflineBanner';
 import Login from './components/Login';
 import Layout from './components/Layout';
+import BookLibrary from './components/BookLibrary';
 import { AppView } from './types';
 import './i18n/translations';
 
@@ -17,6 +18,7 @@ const Glossary = React.lazy(() => import('./components/Glossary'));
 const UserProfileEdit = React.lazy(() => import('./components/UserProfileEdit'));
 const Agenda = React.lazy(() => import('./components/Agenda'));
 const Messages = React.lazy(() => import('./components/Messages'));
+const Vitacoras = React.lazy(() => import('./components/Vitacoras'));
 
 const PageLoader: React.FC = () => (
   <div className="flex items-center justify-center min-h-[400px]">
@@ -25,7 +27,7 @@ const PageLoader: React.FC = () => (
 );
 
 const AppContent: React.FC = () => {
-  const { user, setUser, currentView, setCurrentView, isLoading, isOnline, handleLogout } = useApp();
+  const { user, setUser, currentView, setCurrentView, isLoading, isOnline, handleLogout, bookUnlocked, setBookUnlocked } = useApp();
 
   useEffect(() => {
     if (user && currentView === AppView.LOGIN) {
@@ -53,6 +55,12 @@ const AppContent: React.FC = () => {
         return (
           <Suspense fallback={<PageLoader />}>
             <DreamJournal />
+          </Suspense>
+        );
+      case AppView.VITACORAS:
+        return (
+          <Suspense fallback={<PageLoader />}>
+            <Vitacoras />
           </Suspense>
         );
       case AppView.CHATBOT:
@@ -104,6 +112,16 @@ const AppContent: React.FC = () => {
 
   if (!user && currentView === AppView.LOGIN) {
     return <Login onLogin={setUser} onNavigate={setCurrentView} />;
+  }
+
+  if (currentView === AppView.BOOK) {
+    return (
+      <BookLibrary 
+        isUnlocked={bookUnlocked} 
+        onUnlock={() => setBookUnlocked(true)} 
+        onClose={() => setCurrentView(AppView.DASHBOARD)}
+      />
+    );
   }
 
   return (

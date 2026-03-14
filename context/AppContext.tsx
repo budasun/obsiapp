@@ -11,6 +11,8 @@ interface AppContextType {
   setCurrentView: (view: AppView) => void;
   isLoading: boolean;
   isOnline: boolean;
+  bookUnlocked: boolean;
+  setBookUnlocked: (unlocked: boolean) => void;
   handleLogout: () => Promise<void>;
 }
 
@@ -30,6 +32,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [bookUnlocked, setBookUnlocked] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('obsidiana_book_unlocked') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
@@ -61,6 +70,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [user]);
 
+  useEffect(() => {
+    localStorage.setItem('obsidiana_book_unlocked', bookUnlocked.toString());
+  }, [bookUnlocked]);
+
   const handleLogout = async () => {
     try {
       await auth.signOut();
@@ -83,6 +96,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setCurrentView,
         isLoading,
         isOnline,
+        bookUnlocked,
+        setBookUnlocked,
         handleLogout,
       }}
     >

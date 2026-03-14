@@ -59,6 +59,8 @@ export enum AppView {
   PROFILE = 'PROFILE',
   AGENDA = 'AGENDA',
   MESSAGES = 'MESSAGES',
+  BOOK = 'BOOK',
+  VITACORAS = 'VITACORAS',
 }
 
 export interface MiracleQuestion {

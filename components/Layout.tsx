@@ -13,7 +13,9 @@ import {
   User,
   Menu,
   X,
-  Mail
+  Mail,
+  Library,
+  ScrollText
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -54,9 +56,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, us
       <NavItem view={AppView.DASHBOARD} icon={Moon} label="Mi Ciclo Lunar" />
       <NavItem view={AppView.AGENDA} icon={Calendar} label="Mi Agenda" />
       <NavItem view={AppView.DREAMS} icon={BookHeart} label="Diario de Sueños" />
+      <NavItem view={AppView.VITACORAS} icon={ScrollText} label="Vitácoras" />
       <NavItem view={AppView.CHATBOT} icon={MessageCircleHeart} label="Consejera Osiris" />
       <NavItem view={AppView.COMMUNITY} icon={Users} label="Comunidad" />
       <NavItem view={AppView.MESSAGES} icon={Mail} label="Mensajes" />
+      <NavItem view={AppView.BOOK} icon={Library} label="La Biblioteca" />
       <NavItem view={AppView.GLOSSARY} icon={BookOpen} label="Glosario" />
     </nav>
   );
