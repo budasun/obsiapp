@@ -319,19 +319,19 @@ const PDFViewer: React.FC<{
 
       {/* Controls: Fixed position visually stable and always on top */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 pointer-events-none flex justify-center z-[100] w-full max-w-[90%] md:max-w-[400px]">
-        <div className="pointer-events-auto flex items-center justify-between gap-1 sm:gap-3 bg-obsidian-900/98 backdrop-blur-xl px-2 py-2 sm:px-4 rounded-full text-white shadow-[0_10px_40px_rgba(0,0,0,0.4)] border border-white/10 w-full">
+        <div className="pointer-events-auto flex items-center justify-between gap-1 sm:gap-3 bg-obsidian-900/40 hover:bg-obsidian-900/80 backdrop-blur-md transition-colors duration-300 px-2 py-2 sm:px-4 rounded-full text-white shadow-[0_8px_30px_rgba(0,0,0,0.2)] border border-white/20 w-full">
           <button
             onClick={(e) => { e.stopPropagation(); zoomOut(); }}
-            className="p-3 hover:bg-obsidian-700/50 rounded-full transition-all text-base font-bold active:scale-95"
+            className="p-3 hover:bg-obsidian-700/60 rounded-full transition-all text-base font-bold active:scale-95"
             title="Alejar"
           >
             −
           </button>
-          <div className="flex items-center gap-1 sm:gap-2 bg-obsidian-950/50 rounded-full p-1 border border-white/5">
+          <div className="flex items-center gap-1 sm:gap-2 bg-obsidian-950/30 rounded-full p-1 border border-white/10">
             <button
               onClick={(e) => { e.stopPropagation(); onPageChange(currentPage - 1); }}
               disabled={currentPage <= 1 || isRendering}
-              className="p-2 sm:p-3 hover:bg-obsidian-700 rounded-full disabled:opacity-30 transition-all active:scale-95"
+              className="p-2 sm:p-3 hover:bg-obsidian-700/60 rounded-full disabled:opacity-30 transition-all active:scale-95"
             >
               <ChevronLeft size={20} />
             </button>
@@ -341,14 +341,14 @@ const PDFViewer: React.FC<{
             <button
               onClick={(e) => { e.stopPropagation(); onPageChange(currentPage + 1); }}
               disabled={currentPage >= totalPages || isRendering}
-              className="p-2 sm:p-3 hover:bg-obsidian-700 rounded-full disabled:opacity-30 transition-all active:scale-95"
+              className="p-2 sm:p-3 hover:bg-obsidian-700/60 rounded-full disabled:opacity-30 transition-all active:scale-95"
             >
               <ChevronRight size={20} />
             </button>
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); zoomIn(); }}
-            className="p-3 hover:bg-obsidian-700/50 rounded-full transition-all text-base font-bold active:scale-95"
+            className="p-3 hover:bg-obsidian-700/60 rounded-full transition-all text-base font-bold active:scale-95"
             title="Acercar"
           >
             +
