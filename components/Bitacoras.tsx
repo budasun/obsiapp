@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { analyzeVitacora } from '../services/aiService';
+import { analyzeBitacora } from '../services/aiService';
 import { ScrollText, Send, Loader2, Sparkles, MessageCircle, Plus, ChevronLeft, Library } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 
-export interface VitacoraEntry {
+export interface BitacoraEntry {
   id: string;
   date: string;
   content: string;
@@ -12,12 +12,12 @@ export interface VitacoraEntry {
   chatHistory?: { id: string; role: 'user' | 'model'; text: string }[];
 }
 
-const Vitacoras: React.FC = () => {
-  const [vitacoras, setVitacoras] = useState<VitacoraEntry[]>(() => {
-    const saved = localStorage.getItem('obsidiana_vitacoras');
+const Bitacoras: React.FC = () => {
+  const [bitacoras, setBitacoras] = useState<BitacoraEntry[]>(() => {
+    const saved = localStorage.getItem('obsidiana_bitacoras');
     if (!saved) return [];
 
-    const parsed: VitacoraEntry[] = JSON.parse(saved);
+    const parsed: BitacoraEntry[] = JSON.parse(saved);
     return parsed.map(entry => {
       if (!entry.chatHistory) {
         entry.chatHistory = entry.interpretation
@@ -36,35 +36,35 @@ const Vitacoras: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    localStorage.setItem('obsidiana_vitacoras', JSON.stringify(vitacoras));
-  }, [vitacoras]);
+    localStorage.setItem('obsidiana_bitacoras', JSON.stringify(bitacoras));
+  }, [bitacoras]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [vitacoras, activeId, isAnalyzing]);
+  }, [bitacoras, activeId, isAnalyzing]);
 
   const handleCreateEntry = async () => {
     if (!newEntryText.trim()) return;
 
     setIsAnalyzing(true);
     const newId = Date.now().toString();
-    const newEntry: VitacoraEntry = {
+    const newEntry: BitacoraEntry = {
       id: newId,
       date: new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }),
       content: newEntryText,
-      tags: ['Vitácora', 'Investigación'],
+      tags: ['Bitácora', 'Investigación'],
       chatHistory: []
     };
 
-    setVitacoras(prev => [newEntry, ...prev]);
+    setBitacoras(prev => [newEntry, ...prev]);
     setActiveId(newId);
     setIsCreating(false);
     setNewEntryText('');
 
     try {
       const prompt = `Analiza y proporciona contexto expansivo sobre la siguiente nota o investigación: "${newEntry.content}"`;
-      const analysis = await analyzeVitacora(prompt);
-      setVitacoras(prev => prev.map(v =>
+      const analysis = await analyzeBitacora(prompt);
+      setBitacoras(prev => prev.map(v =>
         v.id === newId ? {
           ...v,
           interpretation: analysis,
@@ -72,7 +72,7 @@ const Vitacoras: React.FC = () => {
         } : v
       ));
     } catch (error) {
-      console.error("Error analyzing vitacora:", error);
+      console.error("Error analyzing bitacora:", error);
     } finally {
       setIsAnalyzing(false);
     }
@@ -81,22 +81,22 @@ const Vitacoras: React.FC = () => {
   const handleSendFollowUp = async () => {
     if (!chatInput.trim() || !activeId) return;
 
-    const activeEntry = vitacoras.find(v => v.id === activeId);
+    const activeEntry = bitacoras.find(v => v.id === activeId);
     if (!activeEntry) return;
 
     const userMsgId = Date.now().toString();
     const newHistory = [...(activeEntry.chatHistory || []), { id: userMsgId, role: 'user' as const, text: chatInput }];
 
-    setVitacoras(prev => prev.map(v => v.id === activeId ? { ...v, chatHistory: newHistory } : v));
+    setBitacoras(prev => prev.map(v => v.id === activeId ? { ...v, chatHistory: newHistory } : v));
     setChatInput('');
     setIsAnalyzing(true);
 
     try {
       const contextPrompt = `Nota o tema original: "${activeEntry.content}"\n\nHistorial de exploración previa:\n${newHistory.map(m => `${m.role === 'user' ? 'Usuaria' : 'LlamaSearch'}: ${m.text}`).join('\n\n')}\n\nPor favor, responde directamente a la última pregunta de la usuaria profundizando y sirviendo como motor de búsqueda avanzado. No dudes en dar referencias o links en Markdown [como este](https://ejemplo.com).`;
 
-      const response = await analyzeVitacora(contextPrompt);
+      const response = await analyzeBitacora(contextPrompt);
 
-      setVitacoras(prev => prev.map(v => v.id === activeId ? {
+      setBitacoras(prev => prev.map(v => v.id === activeId ? {
         ...v,
         chatHistory: [...newHistory, { id: (Date.now() + 1).toString(), role: 'model', text: response }]
       } : v));
@@ -107,16 +107,16 @@ const Vitacoras: React.FC = () => {
     }
   };
 
-  const activeEntry = vitacoras.find(v => v.id === activeId);
+  const activeEntry = bitacoras.find(v => v.id === activeId);
 
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col md:flex-row gap-6 animate-fade-in pb-4">
 
-      {/* PANEL IZQUIERDO: Lista de Vitácoras */}
+      {/* PANEL IZQUIERDO: Lista de Bitácoras */}
       <div className={`w-full md:w-1/3 bg-white rounded-3xl shadow-sm border border-obsidian-100 flex flex-col overflow-hidden ${(activeId || isCreating) ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-5 border-b border-obsidian-50 bg-obsidian-50/30 flex justify-between items-center">
           <h2 className="font-serif text-xl font-bold text-obsidian-900 flex items-center gap-2">
-            <ScrollText className="text-obsidian-600" size={20} /> Vitácoras
+            <ScrollText className="text-obsidian-600" size={20} /> Bitácoras
           </h2>
           <button
             onClick={() => {
@@ -131,13 +131,13 @@ const Vitacoras: React.FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin scrollbar-thumb-obsidian-200">
-          {vitacoras.length === 0 ? (
+          {bitacoras.length === 0 ? (
             <div className="text-center py-10 px-4 text-gray-400">
               <Library size={32} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-medium">Aún no hay vitácoras. Registra tus estudios o pensamientos.</p>
+              <p className="text-sm font-medium">Aún no hay bitácoras. Registra tus estudios o pensamientos.</p>
             </div>
           ) : (
-            vitacoras.map((entry) => (
+            bitacoras.map((entry) => (
               <button
                 key={entry.id}
                 onClick={() => {
@@ -215,7 +215,7 @@ const Vitacoras: React.FC = () => {
                 <ChevronLeft size={24} />
               </button>
               <div>
-                <h3 className="font-serif font-bold text-gray-900">Vitácora Activa</h3>
+                <h3 className="font-serif font-bold text-gray-900">Bitácora Activa</h3>
                 <p className="text-[10px] text-gray-500 uppercase">{activeEntry?.date}</p>
               </div>
             </div>
@@ -284,4 +284,4 @@ const Vitacoras: React.FC = () => {
   );
 };
 
-export default Vitacoras;
+export default Bitacoras;

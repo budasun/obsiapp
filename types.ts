@@ -60,7 +60,7 @@ export enum AppView {
   AGENDA = 'AGENDA',
   MESSAGES = 'MESSAGES',
   BOOK = 'BOOK',
-  VITACORAS = 'VITACORAS',
+  BITACORAS = 'BITACORAS',
 }
 
 export interface MiracleQuestion {

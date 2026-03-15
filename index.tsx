@@ -18,7 +18,7 @@ const Glossary = React.lazy(() => import('./components/Glossary'));
 const UserProfileEdit = React.lazy(() => import('./components/UserProfileEdit'));
 const Agenda = React.lazy(() => import('./components/Agenda'));
 const Messages = React.lazy(() => import('./components/Messages'));
-const Vitacoras = React.lazy(() => import('./components/Vitacoras'));
+const Bitacoras = React.lazy(() => import('./components/Bitacoras'));
 
 const PageLoader: React.FC = () => (
   <div className="flex items-center justify-center min-h-[400px]">
@@ -57,10 +57,10 @@ const AppContent: React.FC = () => {
             <DreamJournal />
           </Suspense>
         );
-      case AppView.VITACORAS:
+      case AppView.BITACORAS:
         return (
           <Suspense fallback={<PageLoader />}>
-            <Vitacoras />
+            <Bitacoras />
           </Suspense>
         );
       case AppView.CHATBOT:

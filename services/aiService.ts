@@ -1,6 +1,6 @@
 // Archivo: src/services/geminiService.ts (o groqService.ts)
 
-import { CHATBOT_SYSTEM_INSTRUCTION, DREAM_ANALYSIS_SYSTEM_INSTRUCTION, MIRACLE_FEEDBACK_SYSTEM_INSTRUCTION, VITACORA_SYSTEM_INSTRUCTION } from "../constants";
+import { CHATBOT_SYSTEM_INSTRUCTION, DREAM_ANALYSIS_SYSTEM_INSTRUCTION, MIRACLE_FEEDBACK_SYSTEM_INSTRUCTION, BITACORA_SYSTEM_INSTRUCTION } from "../constants";
 import Groq from "groq-sdk";
 
 const getApiKey = () => {
@@ -90,15 +90,15 @@ export const analyzeDream = async (dreamText: string): Promise<string> => {
   }
 };
 
-export const analyzeVitacora = async (vitacoraText: string): Promise<string> => {
+export const analyzeBitacora = async (bitacoraText: string): Promise<string> => {
   if (!isConfigured()) {
     return getRandomDemoResponse('dream');
   }
 
   try {
-    return await callGroq(VITACORA_SYSTEM_INSTRUCTION, vitacoraText);
+    return await callGroq(BITACORA_SYSTEM_INSTRUCTION, bitacoraText);
   } catch (error) {
-    console.error("Error analyzing vitacora:", error);
+    console.error("Error analyzing bitacora:", error);
     return getRandomDemoResponse('dream');
   }
 };

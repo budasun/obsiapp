@@ -7,7 +7,7 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
 
 const STORAGE_KEY = 'obsidiana_book_progress';
-const VITACORAS_KEY = 'obsidiana_vitacoras';
+const BITACORAS_KEY = 'obsidiana_bitacoras';
 
 // --- HOOKS ---
 const useBookProgress = () => {
@@ -556,15 +556,15 @@ const BookLibrary: React.FC<{ isUnlocked: boolean; onUnlock?: () => void; onClos
               disabled={!annotationText.trim() || isSaving}
               onClick={() => {
                 setIsSaving(true);
-                const saved = localStorage.getItem(VITACORAS_KEY);
-                const vitacoras = saved ? JSON.parse(saved) : [];
-                vitacoras.unshift({
+                const saved = localStorage.getItem(BITACORAS_KEY);
+                const bitacoras = saved ? JSON.parse(saved) : [];
+                bitacoras.unshift({
                   id: Date.now().toString(),
                   date: new Date().toLocaleDateString(),
                   content: `[LIBRO Pág. ${currentPage}]: ${annotationText}`,
                   tags: ['Biblioteca']
                 });
-                localStorage.setItem(VITACORAS_KEY, JSON.stringify(vitacoras));
+                localStorage.setItem(BITACORAS_KEY, JSON.stringify(bitacoras));
                 setTimeout(() => {
                   setShowAnnotationModal(false);
                   setAnnotationText('');
@@ -573,7 +573,7 @@ const BookLibrary: React.FC<{ isUnlocked: boolean; onUnlock?: () => void; onClos
               }}
               className="w-full mt-6 py-4 bg-obsidian-800 text-white rounded-2xl font-bold hover:bg-black transition-all disabled:opacity-50"
             >
-              {isSaving ? "Guardando..." : "Integrar a Vitácoras"}
+              {isSaving ? "Guardando..." : "Integrar a Bitácoras"}
             </button>
           </div>
         </div>
