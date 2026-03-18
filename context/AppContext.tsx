@@ -43,20 +43,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
           if (docSnap.exists()) {
             const data = docSnap.data();
-            const userData: UserProfile = {
-              name: data.name || fbUser.displayName || 'Viajera Lunar',
-              birthDate: data.birthDate || '',
-              lastPeriodDate: data.lastPeriodDate || '',
-              cycleLength: data.cycleLength || 28,
-              email: data.email || fbUser.email || '',
-              avatarUrl: data.avatarUrl || fbUser.photoURL || undefined,
-              isPremium: data.isPremium ?? false,
-              hasBook: data.hasBook ?? false,
-              trialStartTime: data.trialStartTime ?? undefined,
-            };
-            setUser(userData);
+            if (data.profileComplete) {
+              const userData: UserProfile = {
+                name: data.name || fbUser.displayName || 'Viajera Lunar',
+                birthDate: data.birthDate || '',
+                lastPeriodDate: data.lastPeriodDate || '',
+                cycleLength: data.cycleLength || 28,
+                email: data.email || fbUser.email || '',
+                avatarUrl: data.avatarUrl || fbUser.photoURL || undefined,
+                isPremium: data.isPremium ?? false,
+                hasBook: data.hasBook ?? false,
+                trialStartTime: data.trialStartTime ?? undefined,
+              };
+              setUser(userData);
+            } else {
+              setUser({
+                name: fbUser.displayName || 'Viajera Lunar',
+                birthDate: '',
+                lastPeriodDate: '',
+                cycleLength: 28,
+                email: fbUser.email || '',
+                avatarUrl: fbUser.photoURL || undefined,
+                isPremium: false,
+                hasBook: false,
+                trialStartTime: undefined,
+              });
+            }
           } else {
-            const newUserData: UserProfile = {
+            setUser({
               name: fbUser.displayName || 'Viajera Lunar',
               birthDate: '',
               lastPeriodDate: '',
@@ -66,12 +80,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               isPremium: false,
               hasBook: false,
               trialStartTime: undefined,
-            };
-            await setDoc(userRef, {
-              ...newUserData,
-              createdAt: new Date().toISOString(),
             });
-            setUser(newUserData);
           }
         } else {
           setUser(null);

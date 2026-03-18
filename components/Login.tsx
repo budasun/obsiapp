@@ -4,6 +4,8 @@ import { UserProfile, AppView } from '../types';
 import { Flower, Star, Loader2 } from 'lucide-react';
 import { auth } from '../services/firebase';
 import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import { validateUserProfile, validateEmail, validatePassword } from '../utils/validation';
 
 interface LoginProps {
@@ -32,7 +34,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     setIsLoading(true);
     setError(null);
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      setFormData(prev => ({
+        ...prev,
+        name: user.displayName || '',
+        email: user.email || '',
+        avatarUrl: user.photoURL || ''
+      }));
+
+      setStep('profile');
     } catch (err: any) {
       console.error("Error with Google Login:", err.code, err.message);
       if (err.code === 'auth/popup-closed-by-user') {
@@ -104,7 +116,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     }
   };
 
-  const handleSubmitProfile = (e: React.FormEvent) => {
+  const handleSubmitProfile = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const validation = validateUserProfile({
@@ -125,8 +137,25 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
       lastPeriodDate: formData.lastPeriodDate,
       cycleLength: formData.cycleLength,
       email: formData.email || 'user@example.com',
-      avatarUrl: formData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'User')}&background=fbcfe8&color=831843`
+      avatarUrl: formData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'User')}&background=fbcfe8&color=831843`,
+      isPremium: false,
+      hasBook: false,
+      trialStartTime: undefined
     };
+
+    try {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        await setDoc(doc(db, 'users', currentUser.uid), {
+          ...user,
+          profileComplete: true,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error('Error guardando perfil:', error);
+    }
+
     onLogin(user);
     onNavigate(AppView.DASHBOARD);
   };
