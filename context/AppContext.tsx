@@ -35,6 +35,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   useEffect(() => {
+    let isMounted = true;
+
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       try {
         if (fbUser) {
@@ -43,51 +45,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
           if (docSnap.exists()) {
             const data = docSnap.data();
-            if (data.profileComplete) {
-              const userData: UserProfile = {
-                name: data.name || fbUser.displayName || 'Viajera Lunar',
-                birthDate: data.birthDate || '',
-                lastPeriodDate: data.lastPeriodDate || '',
-                cycleLength: data.cycleLength || 28,
-                email: data.email || fbUser.email || '',
-                avatarUrl: data.avatarUrl || fbUser.photoURL || undefined,
-                isPremium: data.isPremium ?? false,
-                hasBook: data.hasBook ?? false,
-                trialStartTime: data.trialStartTime ?? undefined,
-              };
+            // Siempre usamos los datos de Firestore si existen
+            const userData: UserProfile = {
+              name: data.name || fbUser.displayName || 'Viajera Lunar',
+              birthDate: data.birthDate || '',
+              lastPeriodDate: data.lastPeriodDate || '',
+              cycleLength: data.cycleLength || 28,
+              email: data.email || fbUser.email || '',
+              avatarUrl: data.avatarUrl || fbUser.photoURL || undefined,
+              isPremium: data.isPremium ?? false,
+              hasBook: data.hasBook ?? false,
+              trialStartTime: data.trialStartTime ?? undefined,
+            };
+            if (isMounted) {
               setUser(userData);
-            } else {
+            }
+          } else {
+            // Usuario nuevo - crear documento inicial
+            const initialData = {
+              name: fbUser.displayName || 'Viajera Lunar',
+              email: fbUser.email || '',
+              avatarUrl: fbUser.photoURL || '',
+              isPremium: false,
+              hasBook: false,
+              trialStartTime: null,
+              profileComplete: false,
+              createdAt: new Date().toISOString(),
+            };
+            await setDoc(userRef, initialData);
+            if (isMounted) {
               setUser({
-                name: fbUser.displayName || 'Viajera Lunar',
+                name: initialData.name,
                 birthDate: '',
                 lastPeriodDate: '',
                 cycleLength: 28,
-                email: fbUser.email || '',
-                avatarUrl: fbUser.photoURL || undefined,
+                email: initialData.email,
+                avatarUrl: initialData.avatarUrl || undefined,
                 isPremium: false,
                 hasBook: false,
                 trialStartTime: undefined,
               });
             }
-          } else {
-            setUser({
-              name: fbUser.displayName || 'Viajera Lunar',
-              birthDate: '',
-              lastPeriodDate: '',
-              cycleLength: 28,
-              email: fbUser.email || '',
-              avatarUrl: fbUser.photoURL || undefined,
-              isPremium: false,
-              hasBook: false,
-              trialStartTime: undefined,
-            });
           }
         } else {
-          setUser(null);
+          if (isMounted) {
+            setUser(null);
+          }
         }
       } catch (error) {
         console.error('Error en autenticación:', error);
-        if (fbUser) {
+        if (fbUser && isMounted) {
           setUser({
             name: fbUser.displayName || 'Viajera Lunar',
             birthDate: '',
@@ -99,16 +106,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             hasBook: false,
             trialStartTime: undefined,
           });
-        } else {
+        } else if (isMounted) {
           setUser(null);
         }
       } finally {
-        setFirebaseUser(fbUser);
-        setIsLoading(false);
+        if (isMounted) {
+          setFirebaseUser(fbUser);
+          setIsLoading(false);
+        }
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

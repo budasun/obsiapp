@@ -38,16 +38,39 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
 
         if (userId) {
             // Determinamos qué compró (Libro o Membresía)
-            // Buscamos si el pago fue por 5.99 dólares/euros (599 centavos). Ajusta este número si tu libro cuesta diferente.
-            const isBookPurchase = session.amount_total === 599;
+            // Primero verificamos si es un pago gratuito (cupón 100%)
+            const isFree = session.amount_total === 0 || session.amount_total === null;
+            
+            // Buscamos el precio del producto
+            const priceId = session.line_items?.data?.[0]?.price?.id;
+            
+            // Mapeo de price IDs a tipos de compra (ajusta estos IDs con los tuyos de Stripe)
+            // Estos son ejemplos - verifica los IDs en tu dashboard de Stripe
+            const bookPriceIds = ['price_xxx', 'price_libro']; // IDs de precios del libro
+            const proPriceIds = ['price_xxx', 'price_pro']; // IDs de precios PRO
+
+            let isBookPurchase = false;
+            let isProPurchase = false;
+
+            if (priceId) {
+                isBookPurchase = bookPriceIds.some(id => priceId.includes(id));
+                isProPurchase = proPriceIds.some(id => priceId.includes(id));
+            } else if (session.metadata?.productType) {
+                // También puedes pasar el tipo de producto en los metadata desde React
+                isBookPurchase = session.metadata.productType === 'book';
+                isProPurchase = session.metadata.productType === 'pro';
+            } else if (isFree) {
+                // Si es gratuito pero tuvo éxito, asumimos PRO (cupón 100%)
+                isProPurchase = true;
+            }
 
             const userRef = db.collection('users').doc(userId);
 
             if (isBookPurchase) {
                 await userRef.update({ hasBook: true });
                 console.log(`Candado del Libro abierto para el usuario: ${userId}`);
-            } else {
-                // Si no es el libro, asumimos que es el plan PRO (mensual, anual o donación)
+            } 
+            if (isProPurchase) {
                 await userRef.update({ isPremium: true });
                 console.log(`Candado PRO abierto para el usuario: ${userId}`);
             }
