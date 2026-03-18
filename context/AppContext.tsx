@@ -36,26 +36,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      if (fbUser) {
-        const userRef = doc(db, 'users', fbUser.uid);
-        const docSnap = await getDoc(userRef);
+      try {
+        if (fbUser) {
+          const userRef = doc(db, 'users', fbUser.uid);
+          const docSnap = await getDoc(userRef);
 
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          const userData: UserProfile = {
-            name: data.name || fbUser.displayName || 'Viajera Lunar',
-            birthDate: data.birthDate || '',
-            lastPeriodDate: data.lastPeriodDate || '',
-            cycleLength: data.cycleLength || 28,
-            email: data.email || fbUser.email || '',
-            avatarUrl: data.avatarUrl || fbUser.photoURL || undefined,
-            isPremium: data.isPremium ?? false,
-            hasBook: data.hasBook ?? false,
-            trialStartTime: data.trialStartTime ?? undefined,
-          };
-          setUser(userData);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const userData: UserProfile = {
+              name: data.name || fbUser.displayName || 'Viajera Lunar',
+              birthDate: data.birthDate || '',
+              lastPeriodDate: data.lastPeriodDate || '',
+              cycleLength: data.cycleLength || 28,
+              email: data.email || fbUser.email || '',
+              avatarUrl: data.avatarUrl || fbUser.photoURL || undefined,
+              isPremium: data.isPremium ?? false,
+              hasBook: data.hasBook ?? false,
+              trialStartTime: data.trialStartTime ?? undefined,
+            };
+            setUser(userData);
+          } else {
+            const newUserData: UserProfile = {
+              name: fbUser.displayName || 'Viajera Lunar',
+              birthDate: '',
+              lastPeriodDate: '',
+              cycleLength: 28,
+              email: fbUser.email || '',
+              avatarUrl: fbUser.photoURL || undefined,
+              isPremium: false,
+              hasBook: false,
+              trialStartTime: undefined,
+            };
+            await setDoc(userRef, {
+              ...newUserData,
+              createdAt: new Date().toISOString(),
+            });
+            setUser(newUserData);
+          }
         } else {
-          const newUserData: UserProfile = {
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Error en autenticación:', error);
+        if (fbUser) {
+          setUser({
             name: fbUser.displayName || 'Viajera Lunar',
             birthDate: '',
             lastPeriodDate: '',
@@ -65,18 +89,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             isPremium: false,
             hasBook: false,
             trialStartTime: undefined,
-          };
-          await setDoc(userRef, {
-            ...newUserData,
-            createdAt: new Date().toISOString(),
           });
-          setUser(newUserData);
+        } else {
+          setUser(null);
         }
-      } else {
-        setUser(null);
+      } finally {
+        setFirebaseUser(fbUser);
+        setIsLoading(false);
       }
-      setFirebaseUser(fbUser);
-      setIsLoading(false);
     });
 
     return () => unsubscribe();

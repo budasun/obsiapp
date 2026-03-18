@@ -32,17 +32,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      setFormData(prev => ({
-        ...prev,
-        name: user.displayName || '',
-        email: user.email || '',
-        avatarUrl: user.photoURL || ''
-      }));
-
-      setStep('profile');
+      await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error("Error with Google Login:", err.code, err.message);
       if (err.code === 'auth/popup-closed-by-user') {
