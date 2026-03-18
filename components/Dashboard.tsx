@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, MiracleQuestion } from '../types';
+import { UserProfile, MiracleQuestion, AppView } from '../types';
 import { MIRACLE_QUESTIONS, PHASE_DETAILS } from '../constants';
 import { getMiracleFeedback } from '../services/aiService'; // Ajusta a tu servicio de IA
 import { Sparkles, Droplet, Calendar, Hourglass, RotateCw, MapPin, Send, Loader2, Wand2, Info, ChevronDown, ChevronUp, Zap, Activity, Moon as MoonIcon, FileText, X, ChevronLeft, PenTool } from 'lucide-react';
@@ -366,7 +366,7 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number, onUpdateP
 
 // DASHBOARD PRINCIPAL
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
-  const { setUser } = useApp();
+  const { setUser, setCurrentView } = useApp();
   const [dailyQuestion, setDailyQuestion] = useState<MiracleQuestion | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -413,8 +413,31 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     }
   };
 
-  const lastPeriod = new Date(user.lastPeriodDate);
-  const birthDate = new Date(user.birthDate);
+  const lastPeriod = user.lastPeriodDate ? new Date(user.lastPeriodDate) : null;
+  const birthDate = user.birthDate ? new Date(user.birthDate) : null;
+
+  if (!lastPeriod || !birthDate || isNaN(lastPeriod.getTime()) || isNaN(birthDate.getTime())) {
+    return (
+      <div className="space-y-8 animate-fade-in pb-10">
+        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+          <div>
+            <h2 className="text-3xl font-serif text-obsidian-900 mb-2">Bienvenida, {user.name}</h2>
+            <p className="text-gray-600 font-sans">Hoy es un buen día para conectar con tu centro.</p>
+          </div>
+        </header>
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-obsidian-100 text-center">
+          <h3 className="text-xl font-serif text-obsidian-900 mb-4">Completa tu perfil</h3>
+          <p className="text-gray-600 mb-6">Para ver tu ciclo menstrual y bio-ritmo, necesitamos que completes tu información personal.</p>
+          <button
+            onClick={() => setCurrentView(AppView.PROFILE)}
+            className="bg-obsidian-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-obsidian-700 transition-colors"
+          >
+            Completar mi perfil
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const diffTime = Math.abs(currentDate.getTime() - lastPeriod.getTime());
   const cycleDay = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
