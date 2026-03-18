@@ -27,19 +27,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     avatarUrl: ''
   });
 
-  const handleDemoLogin = () => {
-    const demoUser: UserProfile = {
-      name: 'Viajera Lunar',
-      birthDate: '1990-01-15',
-      lastPeriodDate: new Date().toISOString().split('T')[0],
-      cycleLength: 28,
-      email: 'demo@obsidiana.app',
-      avatarUrl: 'https://ui-avatars.com/api/?name=Demo&background=fbcfe8&color=831843'
-    };
-    onLogin(demoUser);
-    onNavigate(AppView.DASHBOARD);
-  };
-
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     setIsLoading(true);
@@ -129,7 +116,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
 
   const handleSubmitProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const validation = validateUserProfile({
       name: formData.name,
       birthDate: formData.birthDate,
@@ -170,7 +157,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
           {step === 'login' || step === 'register' ? (
             <div className="space-y-6">
               <p className="text-center text-gray-700 font-sans leading-relaxed">
-                {step === 'login' 
+                {step === 'login'
                   ? 'Inicia sesión para sincronizar tu sabiduría biológica con los ciclos celestes y guardar tu progreso en el tiempo.'
                   : 'Crea tu cuenta para comenzar tu viaje de sanación uterina.'}
               </p>
@@ -195,13 +182,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                   </svg>
                 </div>
                 <span>{isLoading ? <Loader2 className="animate-spin" /> : 'Acceder con Google'}</span>
-              </button>
-
-              <button
-                onClick={handleDemoLogin}
-                className="w-full h-12 flex items-center justify-center space-x-2 bg-gradient-to-r from-amber-400 to-pink-500 hover:from-amber-500 hover:to-pink-600 text-white font-bold py-3 px-4 rounded-2xl transition-all transform hover:scale-[1.01] active:scale-95"
-              >
-                <span>Entrar como Invitado (Demo)</span>
               </button>
 
               <div className="relative">

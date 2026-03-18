@@ -376,8 +376,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const [showPhaseDetails, setShowPhaseDetails] = useState(false);
 
   useEffect(() => {
-    const randomIndex = Math.floor(Math.random() * MIRACLE_QUESTIONS.length);
-    setDailyQuestion(MIRACLE_QUESTIONS[randomIndex]);
+    // Calculamos los días totales transcurridos desde el inicio (Epoch)
+    const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+    
+    // Usamos el operador módulo para crear un ciclo constante basado en el día
+    const dailyIndex = daysSinceEpoch % MIRACLE_QUESTIONS.length;
+    
+    setDailyQuestion(MIRACLE_QUESTIONS[dailyIndex]);
   }, []);
 
   const handleSetToday = () => {

@@ -15,9 +15,13 @@ import {
   X,
   Mail,
   Library,
-  ScrollText
+  ScrollText,
+  Crown,
+  Sparkles
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -29,30 +33,119 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, user, onLogout }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { isOnline } = useApp();
+  const [showTrialPopup, setShowTrialPopup] = useState(false);
+  const [pendingView, setPendingView] = useState<AppView | null>(null);
+  const { isOnline, firebaseUser } = useApp();
+
+  const PRO_VIEWS = [AppView.DREAMS, AppView.BITACORAS, AppView.CHATBOT, AppView.COMMUNITY];
+
+  const handleStartTrial = async () => {
+    if (!user) return;
+    
+    const now = Date.now();
+    
+    if (firebaseUser) {
+      try {
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        await updateDoc(userRef, {
+          trialStartTime: now
+        });
+      } catch (error) {
+        console.error('Error guardando trial en Firebase:', error);
+      }
+    }
+
+    user.trialStartTime = now;
+    
+    setShowTrialPopup(false);
+    if (pendingView) {
+      onChangeView(pendingView);
+      setPendingView(null);
+    }
+  };
+
+  const handleProViewClick = (view: AppView) => {
+    if (!user?.isPremium) {
+      const trialTime = user?.trialStartTime;
+      if (!trialTime) {
+        setPendingView(view);
+        setShowTrialPopup(true);
+      } else {
+        const elapsedMins = (Date.now() - trialTime) / (1000 * 60);
+        if (elapsedMins >= 28) {
+          setPendingView(view);
+          setShowTrialPopup(true);
+        } else {
+          onChangeView(view);
+        }
+      }
+    } else {
+      onChangeView(view);
+    }
+    setIsMobileMenuOpen(false);
+  };
 
   if (!user && currentView === AppView.LOGIN) {
     return <>{children}</>;
   }
 
-  const NavItem = ({ view, icon: Icon, label }: { view: AppView; icon: any; label: string }) => (
-    <button
-      onClick={() => {
+  const NavItem = ({ view, icon: Icon, label }: { view: AppView; icon: any; label: string }) => {
+    const isProView = PRO_VIEWS.includes(view);
+    const handleClick = () => {
+      if (isProView && !user?.isPremium) {
+        const trialTime = user?.trialStartTime;
+        if (!trialTime) {
+          setPendingView(view);
+          setShowTrialPopup(true);
+        } else {
+          const elapsedMins = (Date.now() - trialTime) / (1000 * 60);
+          if (elapsedMins >= 28) {
+            setPendingView(view);
+            setShowTrialPopup(true);
+          } else {
+            onChangeView(view);
+          }
+        }
+      } else {
         onChangeView(view);
-        setIsMobileMenuOpen(false);
-      }}
-      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${currentView === view
-        ? 'bg-obsidian-200 text-obsidian-900 shadow-sm'
-        : 'text-gray-600 hover:bg-obsidian-50 hover:text-obsidian-700'
-        }`}
-    >
-      <Icon size={20} />
-      <span className="font-sans font-medium">{label}</span>
-    </button>
-  );
+      }
+      setIsMobileMenuOpen(false);
+    };
+
+    return (
+      <button
+        onClick={handleClick}
+        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${currentView === view
+          ? 'bg-obsidian-200 text-obsidian-900 shadow-sm'
+          : 'text-gray-600 hover:bg-obsidian-50 hover:text-obsidian-700'
+          }`}
+      >
+        <Icon size={20} />
+        <span className="font-sans font-medium">{label}</span>
+        {isProView && <Crown size={14} className="ml-auto text-amber-400" />}
+      </button>
+    );
+  };
 
   const Navigation = () => (
     <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+      <div className="pb-4 mb-4 border-b border-obsidian-100">
+        <button
+          onClick={() => {
+            onChangeView(AppView.PRO_UPGRADE);
+            setIsMobileMenuOpen(false);
+          }}
+          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+            currentView === AppView.PRO_UPGRADE
+              ? 'bg-gradient-to-r from-amber-400 to-[#D4AF37] text-obsidian-900 shadow-md'
+              : 'text-amber-600 hover:bg-amber-50 hover:text-amber-700'
+          }`}
+        >
+          <Crown size={20} className={currentView === AppView.PRO_UPGRADE ? 'text-obsidian-900' : 'text-amber-500'} />
+          <span className="font-sans font-bold">Subir a PRO</span>
+        </button>
+      </div>
+      
       <NavItem view={AppView.DASHBOARD} icon={Moon} label="Mi Ciclo Lunar" />
       <NavItem view={AppView.AGENDA} icon={Calendar} label="Mi Agenda" />
       <NavItem view={AppView.DREAMS} icon={BookHeart} label="Diario de Sueños" />
@@ -174,6 +267,42 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, us
           {children}
         </div>
       </main>
+
+      {/* Trial Popup Modal */}
+      {showTrialPopup && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl transform scale-100 animate-scale-in">
+            <div className="flex justify-center mb-6">
+              <div className="p-4 bg-amber-100 rounded-full">
+                <Sparkles className="text-amber-500" size={48} />
+              </div>
+            </div>
+            <h2 className="text-2xl font-serif font-bold text-obsidian-900 text-center mb-4">
+              El Despertar de la Semilla
+            </h2>
+            <p className="text-obsidian-600 text-center leading-relaxed mb-8">
+              Te obsequiamos un ciclo lunar en miniatura: 28 minutos de acceso total y sin restricciones a la Consejera Osiris, el Diario de Sueños y todas las herramientas de la Sombra. Úsalo para tener tu primera gran revelación. Cuando el tiempo expire, podrás decidir si deseas continuar tu iniciación.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={handleStartTrial}
+                className="w-full py-4 bg-gradient-to-r from-amber-400 to-pink-500 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all active:scale-95"
+              >
+                Comenzar mi Ciclo de Prueba
+              </button>
+              <button
+                onClick={() => {
+                  setShowTrialPopup(false);
+                  setPendingView(null);
+                }}
+                className="w-full py-3 text-gray-500 font-medium hover:text-gray-700 transition-colors"
+              >
+                Ahora no
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

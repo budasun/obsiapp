@@ -6,6 +6,9 @@ export interface UserProfile {
   email?: string;
   avatarUrl?: string;
   coverUrl?: string;
+  isPremium?: boolean;
+  hasBook?: boolean;
+  trialStartTime?: number;
 }
 
 
@@ -61,6 +64,7 @@ export enum AppView {
   MESSAGES = 'MESSAGES',
   BOOK = 'BOOK',
   BITACORAS = 'BITACORAS',
+  PRO_UPGRADE = 'PRO_UPGRADE',
 }
 
 export interface MiracleQuestion {

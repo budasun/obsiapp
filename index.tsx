@@ -7,6 +7,7 @@ import OfflineBanner from './components/OfflineBanner';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import BookLibrary from './components/BookLibrary';
+import ProUpgrade from './components/ProUpgrade';
 import { AppView } from './types';
 import './i18n/translations';
 
@@ -99,6 +100,8 @@ const AppContent: React.FC = () => {
             <Messages user={user} />
           </Suspense>
         ) : null;
+      case AppView.PRO_UPGRADE:
+        return <ProUpgrade onClose={() => setCurrentView(AppView.DASHBOARD)} />;
       default:
         return user ? (
           <Suspense fallback={<PageLoader />}>

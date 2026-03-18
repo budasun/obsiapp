@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { X, BookOpen, PenLine, Lock, Sparkles, ChevronLeft, ChevronRight, Loader2, AlertCircle, Home, ArrowLeft, Maximize, Minimize } from 'lucide-react';
+import { X, BookOpen, PenLine, Lock, Sparkles, ChevronLeft, ChevronRight, Loader2, AlertCircle, Home, ArrowLeft, Maximize, Minimize, Eye } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 // @ts-ignore - pdfjs-dist legacy para mejor compatibilidad
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
 
@@ -362,6 +363,7 @@ const PDFViewer: React.FC<{
 // --- COMPONENTE PRINCIPAL ---
 const BookLibrary: React.FC<{ isUnlocked: boolean; onUnlock?: () => void; onClose?: () => void }> = ({ isUnlocked, onUnlock, onClose }) => {
   const { currentPage, handlePageChange } = useBookProgress();
+  const { firebaseUser } = useApp();
   const [totalPages, setTotalPages] = useState(0);
   const [showAnnotationModal, setShowAnnotationModal] = useState(false);
   const [annotationText, setAnnotationText] = useState('');
@@ -418,27 +420,174 @@ const BookLibrary: React.FC<{ isUnlocked: boolean; onUnlock?: () => void; onClos
       }
     }
   };
+  
+  // --- COMPONENTE LANDING PAGE DEL LIBRO ---
+  type Plan = 'libro_solo';
 
-  if (!isUnlocked) {
+  const BookLanding: React.FC<{ onUnlock: () => void; onClose?: () => void }> = ({ onUnlock, onClose }) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [selectedPreviewImage, setSelectedPreviewImage] = useState<string | null>(null);
+
+    const previewImages = [
+      { src: '/caratula.png', alt: 'Cubierta del libro' },
+      { src: '/indice.png', alt: 'Índice del contenido' },
+      { src: '/cap1.png', alt: 'Primer capítulo' }
+    ];
+
+    const handleStripeCheckout = (plan: Plan) => {
+      setIsLoading(true);
+      
+      const links: Record<Plan, string> = {
+        libro_solo: 'https://buy.stripe.com/8x27sD51McVDawo26w7kc02'
+      };
+
+      const checkoutUrl = firebaseUser ? `${links[plan]}?client_reference_id=${firebaseUser.uid}` : links[plan];
+      window.location.href = checkoutUrl;
+    };
+
     return (
-      <div className="fixed inset-0 bg-[#F5F5F0] flex items-center justify-center p-6 z-[100] animate-fade-in">
-        <div className="max-w-md text-center space-y-8">
-          <div className="relative group">
-            <div className="absolute inset-0 bg-obsidian-400 blur-3xl opacity-20 group-hover:opacity-40 transition-opacity" />
-            <img src="/portada.jpg" alt="Portada" className="relative w-64 h-auto mx-auto rounded-lg shadow-2xl rotate-1 group-hover:rotate-0 transition-transform duration-700" />
+      <div className="fixed inset-0 bg-[#F5F5F0] flex items-start justify-center p-6 pt-24 z-[100] animate-fade-in overflow-y-auto">
+        <div className="max-w-5xl w-full">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="fixed top-6 left-6 z-[110] flex items-center gap-2 text-obsidian-600 hover:text-obsidian-900 transition-colors bg-[#F5F5F0]/80 backdrop-blur-sm p-2 rounded-lg"
+            >
+              <ArrowLeft size={20} />
+              <span className="font-medium">Volver</span>
+            </button>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start py-8">
+            
+            {/* Columna Izquierda: Galería de pre-visualización */}
+            <div className="space-y-6">
+              <div className="relative group">
+                <div className="absolute inset-0 bg-obsidian-400 blur-3xl opacity-20 group-hover:opacity-40 transition-opacity" />
+                <img 
+                  src="/portada.jpg" 
+                  alt="Portada del libro" 
+                  className="relative w-full max-w-xs mx-auto rounded-lg shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] transform rotate-1 group-hover:rotate-0 transition-transform duration-700" 
+                />
+              </div>
+              
+              <div className="text-center">
+                <p className="text-obsidian-500 font-serif mb-4">Echa un vistazo al interior:</p>
+                <div className="flex justify-center gap-4">
+                  {previewImages.map((img, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setSelectedPreviewImage(img.src)}
+                      className="relative group cursor-pointer"
+                    >
+                      <div className="absolute inset-0 bg-[#D4AF37] rounded-lg blur-xl opacity-0 group-hover:opacity-40 transition-opacity" />
+                      <div className="relative bg-white rounded-lg p-2 shadow-lg border border-obsidian-100 hover:-translate-y-1 transition-transform">
+                        <img 
+                          src={img.src} 
+                          alt={img.alt}
+                          className="w-20 h-28 object-cover rounded" 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/portada.jpg';
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg flex items-center justify-center">
+                          <Eye className="text-white opacity-0 group-hover:opacity-100 transition-opacity" size={24} />
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Columna Derecha: Copywriting y Checkout */}
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <h1 className="text-4xl font-serif font-bold text-obsidian-900 italic">
+                  ¿Cómo usar el Huevo de Obsidiana?
+                </h1>
+                <p className="text-obsidian-600 font-serif text-lg">
+                  Guía para la sanación de la energía femenina.
+                </p>
+              </div>
+
+              <div className="bg-white rounded-2xl p-6 shadow-xl border border-obsidian-100">
+                <div className="mb-4">
+                  <span className="text-4xl font-bold text-obsidian-900">🇺🇸$5.99</span>
+                  <span className="text-obsidian-500 ml-2">pago único</span>
+                </div>
+
+                <p className="text-obsidian-600 leading-relaxed mb-6">
+                  Descubre la naturaleza de este cristal volcánico y aprende a integrarlo en tu vida 
+                  con seguridad, consciencia y poder. Desbloquea la lectura digital inmersiva, 
+                  marcadores y notas personales para siempre.
+                </p>
+
+                <ul className="space-y-2 mb-6">
+                  {[
+                    'Lectura digital inmersiva',
+                    'Marcadores y notas personales',
+                    'Acceso para siempre',
+                    'Compatible con móviles y desktop'
+                  ].map((feature, i) => (
+                    <li key={i} className="flex items-center gap-2 text-obsidian-600">
+                      <Sparkles className="text-[#D4AF37] flex-shrink-0" size={16} />
+                      <span className="text-sm">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <button
+                  onClick={() => handleStripeCheckout('libro_solo')}
+                  disabled={isLoading}
+                  className="w-full py-4 bg-obsidian-800 text-white rounded-2xl font-bold shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-70"
+                >
+                  {isLoading ? (
+                    <span className="animate-pulse">Redirigiendo...</span>
+                  ) : (
+                    <>
+                      <Lock size={18} /> Desbloquear Libro por 🇺🇸$5.99
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <p className="text-center text-obsidian-400 text-sm">
+                Pago seguro con Stripe
+              </p>
+            </div>
+
           </div>
-          <div className="space-y-4">
-            <h1 className="text-4xl font-serif font-bold text-obsidian-900 italic">El Despertar de Osiris</h1>
-            <p className="text-obsidian-600 font-serif leading-relaxed text-lg">
-              El mapa sagrado de tu inconsciente te espera. Desbloquea la guía completa de arquetipos.
-            </p>
-          </div>
-          <button onClick={onUnlock} className="w-full py-5 bg-obsidian-800 text-white rounded-2xl font-bold shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3 active:scale-95">
-            <Lock size={20} /> Desbloquear Sabiduría $49.99
-          </button>
+
+          {/* Lightbox Modal */}
+          {selectedPreviewImage && (
+            <div 
+              className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4 animate-fade-in"
+              onClick={() => setSelectedPreviewImage(null)}
+            >
+              <button
+                onClick={() => setSelectedPreviewImage(null)}
+                className="absolute top-6 right-6 text-white hover:text-obsidian-300 transition-colors"
+              >
+                <X size={32} />
+              </button>
+              <img 
+                src={selectedPreviewImage} 
+                alt="Vista previa"
+                className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/portada.jpg';
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
+  };
+
+  if (!isUnlocked) {
+    return <BookLanding onUnlock={onUnlock} onClose={onClose} />;
   }
 
   if (!isReading) {
