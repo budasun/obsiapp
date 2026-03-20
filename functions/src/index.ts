@@ -6,23 +6,42 @@ import Stripe from 'stripe';
 admin.initializeApp();
 const db = admin.firestore();
 
-// Inicializamos Stripe (Reemplazaremos esto con tus llaves reales luego)
-// Reemplaza 'sk_test_...' con tu clave secreta real de Stripe
-const stripe = new Stripe('sk_test_TU_CLAVE_SECRETA_AQUI', {
-    apiVersion: '2026-02-25.clover',
-});
+// Claves de Stripe desde variables de entorno
+// Configúralas creando un archivo functions/.env con:
+// STRIPE_SECRET_KEY=sk_test_...
+// STRIPE_WEBHOOK_SECRET=whsec_...
+// O con: firebase functions:secrets:set STRIPE_SECRET_KEY
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
-// Esta es la contraseña secreta entre Stripe y Firebase
-const endpointSecret = 'whsec_TU_SECRETO_DE_WEBHOOK_AQUI';
+if (!stripeSecretKey) {
+    console.warn('⚠️ STRIPE_SECRET_KEY no está configurada. Crea un archivo functions/.env con STRIPE_SECRET_KEY=sk_test_...');
+}
+
+const stripe = new Stripe(stripeSecretKey, {
+    apiVersion: '2024-12-18.acacia' as any,
+});
 
 export const stripeWebhook = functions.https.onRequest(async (req, res) => {
     const sig = req.headers['stripe-signature'];
 
-    let event;
+    if (!sig) {
+        console.error('No stripe-signature header');
+        res.status(400).send('Missing stripe-signature header');
+        return;
+    }
+
+    if (!webhookSecret) {
+        console.error('⚠️ webhook_secret no está configurado. Agrega STRIPE_WEBHOOK_SECRET a functions/.env');
+        res.status(500).send('Webhook secret not configured');
+        return;
+    }
+
+    let event: Stripe.Event;
 
     try {
-        // Verificamos que el mensaje realmente venga de Stripe y no sea un hacker
-        event = stripe.webhooks.constructEvent(req.rawBody, sig as string, endpointSecret);
+        // Verificamos que el mensaje realmente venga de Stripe
+        event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
     } catch (err: any) {
         console.error(`Error de firma de Webhook: ${err.message}`);
         res.status(400).send(`Webhook Error: ${err.message}`);
@@ -33,47 +52,92 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object as Stripe.Checkout.Session;
 
-        // ¡Aquí recuperamos el ID de la usuaria que inyectaste en React!
+        // Recuperamos el ID de la usuaria
         const userId = session.client_reference_id;
+        console.log(`Checkout completado. UserId: ${userId}, Amount: ${session.amount_total}, Status: ${session.payment_status}`);
 
         if (userId) {
-            // Determinamos qué compró (Libro o Membresía)
-            // Primero verificamos si es un pago gratuito (cupón 100%)
-            const isFree = session.amount_total === 0 || session.amount_total === null;
-            
-            // Buscamos el precio del producto
-            const priceId = session.line_items?.data?.[0]?.price?.id;
-            
-            // Mapeo de price IDs a tipos de compra (ajusta estos IDs con los tuyos de Stripe)
-            // Estos son ejemplos - verifica los IDs en tu dashboard de Stripe
-            const bookPriceIds = ['price_xxx', 'price_libro']; // IDs de precios del libro
-            const proPriceIds = ['price_xxx', 'price_pro']; // IDs de precios PRO
+            // Verificar si es un pago gratuito (cupón 100%)
+            const isFree = session.amount_total === 0 || session.payment_status === 'no_payment_required';
 
             let isBookPurchase = false;
             let isProPurchase = false;
 
-            if (priceId) {
-                isBookPurchase = bookPriceIds.some(id => priceId.includes(id));
-                isProPurchase = proPriceIds.some(id => priceId.includes(id));
-            } else if (session.metadata?.productType) {
-                // También puedes pasar el tipo de producto en los metadata desde React
+            // Método 1: Usar metadata que se pasaron desde el frontend
+            if (session.metadata?.productType) {
                 isBookPurchase = session.metadata.productType === 'book';
                 isProPurchase = session.metadata.productType === 'pro';
-            } else if (isFree) {
-                // Si es gratuito pero tuvo éxito, asumimos PRO (cupón 100%)
+                console.log(`Tipo de producto por metadata: ${session.metadata.productType}`);
+            }
+
+            // Método 2: Intentar obtener line_items expandidos desde la API
+            if (!isBookPurchase && !isProPurchase) {
+                try {
+                    const expandedSession = await stripe.checkout.sessions.retrieve(session.id, {
+                        expand: ['line_items', 'line_items.data.price'],
+                    });
+
+                    const lineItems = expandedSession.line_items?.data;
+                    if (lineItems && lineItems.length > 0) {
+                        for (const item of lineItems) {
+                            const priceId = typeof item.price === 'string' ? item.price : item.price?.id;
+                            const productId = typeof item.price === 'object' ? 
+                                (typeof item.price?.product === 'string' ? item.price.product : (item.price?.product as any)?.id) : null;
+                            
+                            console.log(`Line item - PriceId: ${priceId}, ProductId: ${productId}`);
+
+                            // Buscar por nombre del producto o descripción
+                            const description = (item.description || '').toLowerCase();
+                            if (description.includes('libro') || description.includes('book')) {
+                                isBookPurchase = true;
+                            } else if (description.includes('pro') || description.includes('premium') || description.includes('mensual') || description.includes('anual') || description.includes('ciclo')) {
+                                isProPurchase = true;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error expandiendo line_items:', error);
+                }
+            }
+
+            // Método 3: Si es gratuito (cupón 100%), asumir PRO
+            if (!isBookPurchase && !isProPurchase && isFree) {
                 isProPurchase = true;
+                console.log('Pago gratuito (cupón 100%). Asignando PRO por defecto.');
+            }
+
+            // Método 4: Si todavía no se sabe qué es, asumir PRO para cualquier checkout exitoso
+            if (!isBookPurchase && !isProPurchase) {
+                isProPurchase = true;
+                console.log('Tipo de producto no identificado. Asignando PRO por defecto.');
             }
 
             const userRef = db.collection('users').doc(userId);
 
-            if (isBookPurchase) {
-                await userRef.update({ hasBook: true });
-                console.log(`Candado del Libro abierto para el usuario: ${userId}`);
-            } 
-            if (isProPurchase) {
-                await userRef.update({ isPremium: true });
-                console.log(`Candado PRO abierto para el usuario: ${userId}`);
+            try {
+                if (isBookPurchase) {
+                    await userRef.update({ hasBook: true });
+                    console.log(`✅ Candado del Libro abierto para el usuario: ${userId}`);
+                }
+                if (isProPurchase) {
+                    await userRef.update({ isPremium: true });
+                    console.log(`✅ Candado PRO abierto para el usuario: ${userId}`);
+                }
+            } catch (updateError) {
+                console.error(`Error actualizando usuario ${userId}:`, updateError);
+                // Si el documento no existe, crearlo
+                try {
+                    await userRef.set({
+                        isPremium: isProPurchase,
+                        hasBook: isBookPurchase,
+                    }, { merge: true });
+                    console.log(`✅ Documento creado/actualizado con merge para: ${userId}`);
+                } catch (setError) {
+                    console.error(`Error crítico al crear documento: ${setError}`);
+                }
             }
+        } else {
+            console.warn('⚠️ checkout.session.completed sin client_reference_id. No se puede identificar al usuario.');
         }
     }
 

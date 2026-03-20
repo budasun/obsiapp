@@ -1,10 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile, AppView } from '../types';
 import { Flower, Star, Loader2 } from 'lucide-react';
 import { auth } from '../services/firebase';
 import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { validateUserProfile, validateEmail, validatePassword } from '../utils/validation';
 
@@ -29,21 +29,87 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     avatarUrl: ''
   });
 
+  // Si el usuario ya tiene sesión de Firebase pero perfil incompleto, mostrar formulario de perfil
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      // Ya tiene sesión: cargar datos de Firestore y ver si le falta el perfil
+      const checkProfile = async () => {
+        try {
+          const userRef = doc(db, 'users', currentUser.uid);
+          const docSnap = await getDoc(userRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (!data.profileComplete || !data.birthDate || !data.lastPeriodDate) {
+              // Perfil incompleto, ir al paso de perfil
+              setFormData(prev => ({
+                ...prev,
+                name: data.name || currentUser.displayName || '',
+                email: data.email || currentUser.email || '',
+                avatarUrl: data.avatarUrl || currentUser.photoURL || '',
+                birthDate: data.birthDate || '',
+                lastPeriodDate: data.lastPeriodDate || '',
+                cycleLength: data.cycleLength || 28,
+              }));
+              setStep('profile');
+            }
+          } else {
+            // Doc no existe pero hay sesión (nuevo usuario de Google)
+            setFormData(prev => ({
+              ...prev,
+              name: currentUser.displayName || '',
+              email: currentUser.email || '',
+              avatarUrl: currentUser.photoURL || '',
+            }));
+            setStep('profile');
+          }
+        } catch (err) {
+          console.error('Error verificando perfil:', err);
+        }
+      };
+      checkProfile();
+    }
+  }, []);
+
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     setIsLoading(true);
     setError(null);
     try {
       const result = await signInWithPopup(auth, provider);
-      const user = result.user;
+      const fbUser = result.user;
 
+      // Verificar si ya tiene perfil completo en Firestore
+      const userRef = doc(db, 'users', fbUser.uid);
+      const docSnap = await getDoc(userRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.profileComplete && data.birthDate && data.lastPeriodDate) {
+          // Perfil completo: entrar directo
+          const fullUser: UserProfile = {
+            name: data.name || fbUser.displayName || 'Viajera Lunar',
+            birthDate: data.birthDate,
+            lastPeriodDate: data.lastPeriodDate,
+            cycleLength: data.cycleLength || 28,
+            email: data.email || fbUser.email || '',
+            avatarUrl: data.avatarUrl || fbUser.photoURL || undefined,
+            isPremium: data.isPremium ?? false,
+            hasBook: data.hasBook ?? false,
+            trialStartTime: data.trialStartTime ?? undefined,
+          };
+          onLogin(fullUser);
+          onNavigate(AppView.DASHBOARD);
+          return;
+        }
+      }
+
+      // Perfil incompleto: ir al paso de perfil
       setFormData(prev => ({
         ...prev,
-        name: user.displayName || '',
-        email: user.email || '',
-        avatarUrl: user.photoURL || ''
+        name: fbUser.displayName || '',
+        email: fbUser.email || '',
+        avatarUrl: fbUser.photoURL || ''
       }));
-
       setStep('profile');
     } catch (err: any) {
       console.error("Error with Google Login:", err.code, err.message);
@@ -92,6 +158,32 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
         await createUserWithEmailAndPassword(auth, formData.email, formData.password);
       } else {
         await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      }
+
+      // Verificar si ya tiene perfil completo
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        const docSnap = await getDoc(userRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.profileComplete && data.birthDate && data.lastPeriodDate) {
+            const fullUser: UserProfile = {
+              name: data.name || currentUser.displayName || 'Viajera Lunar',
+              birthDate: data.birthDate,
+              lastPeriodDate: data.lastPeriodDate,
+              cycleLength: data.cycleLength || 28,
+              email: data.email || currentUser.email || '',
+              avatarUrl: data.avatarUrl || currentUser.photoURL || undefined,
+              isPremium: data.isPremium ?? false,
+              hasBook: data.hasBook ?? false,
+              trialStartTime: data.trialStartTime ?? undefined,
+            };
+            onLogin(fullUser);
+            onNavigate(AppView.DASHBOARD);
+            return;
+          }
+        }
       }
       setStep('profile');
     } catch (err: any) {

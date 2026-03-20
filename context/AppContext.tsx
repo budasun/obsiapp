@@ -45,7 +45,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
           if (docSnap.exists()) {
             const data = docSnap.data();
-            // Siempre usamos los datos de Firestore si existen
+            const profileIsComplete = data.profileComplete === true && data.birthDate && data.lastPeriodDate;
+
             const userData: UserProfile = {
               name: data.name || fbUser.displayName || 'Viajera Lunar',
               birthDate: data.birthDate || '',
@@ -58,7 +59,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               trialStartTime: data.trialStartTime ?? undefined,
             };
             if (isMounted) {
-              setUser(userData);
+              if (profileIsComplete) {
+                // Perfil completo: entrar directo al dashboard
+                setUser(userData);
+                setCurrentView(AppView.DASHBOARD);
+              } else {
+                // Perfil incompleto: mandar al login para completar datos
+                setUser(null);
+                setCurrentView(AppView.LOGIN);
+              }
             }
           } else {
             // Usuario nuevo - crear documento inicial
@@ -74,40 +83,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             };
             await setDoc(userRef, initialData);
             if (isMounted) {
-              setUser({
-                name: initialData.name,
-                birthDate: '',
-                lastPeriodDate: '',
-                cycleLength: 28,
-                email: initialData.email,
-                avatarUrl: initialData.avatarUrl || undefined,
-                isPremium: false,
-                hasBook: false,
-                trialStartTime: undefined,
-              });
+              // Nuevo usuario necesita completar perfil
+              setUser(null);
+              setCurrentView(AppView.LOGIN);
             }
           }
         } else {
           if (isMounted) {
             setUser(null);
+            setCurrentView(AppView.LOGIN);
           }
         }
       } catch (error) {
         console.error('Error en autenticación:', error);
-        if (fbUser && isMounted) {
-          setUser({
-            name: fbUser.displayName || 'Viajera Lunar',
-            birthDate: '',
-            lastPeriodDate: '',
-            cycleLength: 28,
-            email: fbUser.email || '',
-            avatarUrl: fbUser.photoURL || undefined,
-            isPremium: false,
-            hasBook: false,
-            trialStartTime: undefined,
-          });
-        } else if (isMounted) {
+        if (isMounted) {
+          // En caso de error, mandar al login
           setUser(null);
+          setCurrentView(AppView.LOGIN);
         }
       } finally {
         if (isMounted) {
