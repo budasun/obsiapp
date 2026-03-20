@@ -363,7 +363,7 @@ const PDFViewer: React.FC<{
 // --- COMPONENTE PRINCIPAL ---
 const BookLibrary: React.FC<{ isUnlocked: boolean; onUnlock?: () => void; onClose?: () => void }> = ({ isUnlocked, onUnlock, onClose }) => {
   const { currentPage, handlePageChange } = useBookProgress();
-  const { firebaseUser } = useApp();
+  const { session } = useApp();
   const [totalPages, setTotalPages] = useState(0);
   const [showAnnotationModal, setShowAnnotationModal] = useState(false);
   const [annotationText, setAnnotationText] = useState('');
@@ -441,7 +441,7 @@ const BookLibrary: React.FC<{ isUnlocked: boolean; onUnlock?: () => void; onClos
         libro_solo: 'https://buy.stripe.com/8x27sD51McVDawo26w7kc02'
       };
 
-      const checkoutUrl = firebaseUser ? `${links[plan]}?client_reference_id=${firebaseUser.uid}` : links[plan];
+      const checkoutUrl = session?.user ? `${links[plan]}?client_reference_id=${session.user.id}` : links[plan];
       window.location.href = checkoutUrl;
     };
 

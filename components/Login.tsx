@@ -2,11 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AppView } from '../types';
 import { Flower, Star, Loader2 } from 'lucide-react';
-import { auth } from '../services/firebase';
-import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
-import { validateUserProfile, validateEmail, validatePassword } from '../utils/validation';
+import { supabase } from '../src/lib/supabaseClient';
+import { validateUserProfile } from '../utils/validation';
 
 interface LoginProps {
   onLogin: (user: UserProfile) => void;
@@ -29,99 +26,69 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     avatarUrl: ''
   });
 
-  // Si el usuario ya tiene sesión de Firebase pero perfil incompleto, mostrar formulario de perfil
   useEffect(() => {
-    const currentUser = auth.currentUser;
-    if (currentUser) {
-      // Ya tiene sesión: cargar datos de Firestore y ver si le falta el perfil
-      const checkProfile = async () => {
-        try {
-          const userRef = doc(db, 'users', currentUser.uid);
-          const docSnap = await getDoc(userRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            if (!data.profileComplete || !data.birthDate || !data.lastPeriodDate) {
-              // Perfil incompleto, ir al paso de perfil
-              setFormData(prev => ({
-                ...prev,
-                name: data.name || currentUser.displayName || '',
-                email: data.email || currentUser.email || '',
-                avatarUrl: data.avatarUrl || currentUser.photoURL || '',
-                birthDate: data.birthDate || '',
-                lastPeriodDate: data.lastPeriodDate || '',
-                cycleLength: data.cycleLength || 28,
-              }));
-              setStep('profile');
-            }
-          } else {
-            // Doc no existe pero hay sesión (nuevo usuario de Google)
-            setFormData(prev => ({
-              ...prev,
-              name: currentUser.displayName || '',
-              email: currentUser.email || '',
-              avatarUrl: currentUser.photoURL || '',
-            }));
-            setStep('profile');
-          }
-        } catch (err) {
-          console.error('Error verificando perfil:', err);
-        }
-      };
-      checkProfile();
-    }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        loadProfileAndCheck(session.user.id, session.user);
+      }
+    });
   }, []);
 
+  const loadProfileAndCheck = async (userId: string, authUser: any) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error verificando perfil:', error);
+        return;
+      }
+
+      if (profile) {
+        if (!profile.profile_complete || !profile.birth_date || !profile.last_period_date) {
+          setFormData(prev => ({
+            ...prev,
+            name: profile.full_name || authUser.user_metadata?.full_name || '',
+            email: profile.email || authUser.email || '',
+            avatarUrl: profile.avatar_url || authUser.user_metadata?.avatar_url || '',
+            birthDate: profile.birth_date || '',
+            lastPeriodDate: profile.last_period_date || '',
+            cycleLength: profile.cycle_length || 28,
+          }));
+          setStep('profile');
+        }
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          name: authUser.user_metadata?.full_name || '',
+          email: authUser.email || '',
+          avatarUrl: authUser.user_metadata?.avatar_url || '',
+        }));
+        setStep('profile');
+      }
+    } catch (err) {
+      console.error('Error verificando perfil:', err);
+    }
+  };
+
   const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
     setIsLoading(true);
     setError(null);
     try {
-      const result = await signInWithPopup(auth, provider);
-      const fbUser = result.user;
+      const { data, error: authError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
 
-      // Verificar si ya tiene perfil completo en Firestore
-      const userRef = doc(db, 'users', fbUser.uid);
-      const docSnap = await getDoc(userRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.profileComplete && data.birthDate && data.lastPeriodDate) {
-          // Perfil completo: entrar directo
-          const fullUser: UserProfile = {
-            name: data.name || fbUser.displayName || 'Viajera Lunar',
-            birthDate: data.birthDate,
-            lastPeriodDate: data.lastPeriodDate,
-            cycleLength: data.cycleLength || 28,
-            email: data.email || fbUser.email || '',
-            avatarUrl: data.avatarUrl || fbUser.photoURL || undefined,
-            isPremium: data.isPremium ?? false,
-            hasBook: data.hasBook ?? false,
-            trialStartTime: data.trialStartTime ?? undefined,
-          };
-          onLogin(fullUser);
-          onNavigate(AppView.DASHBOARD);
-          return;
-        }
-      }
-
-      // Perfil incompleto: ir al paso de perfil
-      setFormData(prev => ({
-        ...prev,
-        name: fbUser.displayName || '',
-        email: fbUser.email || '',
-        avatarUrl: fbUser.photoURL || ''
-      }));
-      setStep('profile');
+      if (authError) throw authError;
     } catch (err: any) {
-      console.error("Error with Google Login:", err.code, err.message);
-      if (err.code === 'auth/popup-closed-by-user') {
-        setError("Ventana cerrada. Inténtalo de nuevo.");
-      } else if (err.code === 'auth/unauthorized-domain') {
-        setError("Dominio no autorizado. Configura Firebase Console.");
-      } else if (err.code === 'auth/network-request-failed') {
-        setError("Error de conexión. Verifica tu internet.");
-      } else {
-        setError(`Error: ${err.code || 'desconocido'}. Revisa la consola.`);
-      }
+      console.error("Error with Google Login:", err);
+      setError("No se pudo iniciar sesión con Google. Inténtalo de nuevo.");
     } finally {
       setIsLoading(false);
     }
@@ -148,63 +115,89 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
 
     try {
       if (step === 'register') {
-        const passwordValidation = validatePassword(formData.password);
-        if (!passwordValidation.valid) {
-          setError(passwordValidation.errors[0]);
-          setIsLoading(false);
-          return;
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              full_name: formData.name,
+            }
+          }
+        });
+
+        if (signUpError) throw signUpError;
+        if (data.user) {
+          await saveProfile(data.user.id, true);
+          onNavigate(AppView.DASHBOARD);
         }
-
-        await createUserWithEmailAndPassword(auth, formData.email, formData.password);
       } else {
-        await signInWithEmailAndPassword(auth, formData.email, formData.password);
-      }
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
 
-      // Verificar si ya tiene perfil completo
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        const userRef = doc(db, 'users', currentUser.uid);
-        const docSnap = await getDoc(userRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.profileComplete && data.birthDate && data.lastPeriodDate) {
+        if (signInError) throw signInError;
+
+        if (data.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+
+          if (profile?.profile_complete && profile.birth_date && profile.last_period_date) {
             const fullUser: UserProfile = {
-              name: data.name || currentUser.displayName || 'Viajera Lunar',
-              birthDate: data.birthDate,
-              lastPeriodDate: data.lastPeriodDate,
-              cycleLength: data.cycleLength || 28,
-              email: data.email || currentUser.email || '',
-              avatarUrl: data.avatarUrl || currentUser.photoURL || undefined,
-              isPremium: data.isPremium ?? false,
-              hasBook: data.hasBook ?? false,
-              trialStartTime: data.trialStartTime ?? undefined,
+              name: profile.full_name || data.user.user_metadata?.full_name || 'Viajera Lunar',
+              birthDate: profile.birth_date,
+              lastPeriodDate: profile.last_period_date,
+              cycleLength: profile.cycle_length || 28,
+              email: profile.email || data.user.email || '',
+              avatarUrl: profile.avatar_url || data.user.user_metadata?.avatar_url || undefined,
+              isPremium: profile.is_premium ?? false,
+              hasBook: profile.has_book ?? false,
+              trialStartTime: profile.trial_start_time ?? undefined,
             };
             onLogin(fullUser);
             onNavigate(AppView.DASHBOARD);
             return;
           }
         }
+        setStep('profile');
       }
-      setStep('profile');
     } catch (err: any) {
-      console.error("Auth error:", err.code, err.message);
-      if (err.code === 'auth/email-already-in-use') {
-        setError('Este email ya está registrado');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('Email inválido');
-      } else if (err.code === 'auth/weak-password') {
-        setError('La contraseña debe tener al menos 6 caracteres');
-      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+      console.error("Auth error:", err);
+      if (err.message?.includes('Email not confirmed')) {
+        setError('Email no confirmado. Revisa tu bandeja de entrada.');
+      } else if (err.message?.includes('Invalid login credentials')) {
         setError('Email o contraseña incorrectos');
-      } else if (err.code === 'auth/network-request-failed') {
-        setError('Error de conexión. Verifica tu internet.');
-      } else if (err.code === 'auth/operation-not-allowed') {
-        setError('Método de autenticación no habilitado en Firebase Console.');
+      } else if (err.message?.includes('already registered')) {
+        setError('Este email ya está registrado');
       } else {
-        setError(`Error: ${err.code || 'desconocido'}. Revisa la consola.`);
+        setError(`Error: ${err.message || 'desconocido'}`);
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const saveProfile = async (userId: string, profileComplete: boolean) => {
+    const profileData = {
+      id: userId,
+      email: formData.email,
+      full_name: formData.name || 'Viajera Lunar',
+      birth_date: formData.birthDate,
+      last_period_date: formData.lastPeriodDate,
+      cycle_length: formData.cycleLength,
+      avatar_url: formData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'User')}&background=fbcfe8&color=831843`,
+      profile_complete: profileComplete,
+    };
+
+    const { error } = await supabase
+      .from('profiles')
+      .upsert(profileData, { onConflict: 'id' });
+
+    if (error) {
+      console.error('Error guardando perfil:', error);
     }
   };
 
@@ -213,6 +206,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
 
     const validation = validateUserProfile({
       name: formData.name,
+      email: formData.email,
       birthDate: formData.birthDate,
       lastPeriodDate: formData.lastPeriodDate,
       cycleLength: formData.cycleLength
@@ -236,13 +230,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     };
 
     try {
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        await setDoc(doc(db, 'users', currentUser.uid), {
-          ...user,
-          profileComplete: true,
-          createdAt: new Date().toISOString(),
-        });
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        await saveProfile(authUser.id, true);
       }
     } catch (error) {
       console.error('Error guardando perfil:', error);

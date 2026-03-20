@@ -20,8 +20,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { supabase } from '../src/lib/supabaseClient';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -35,7 +34,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, us
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showTrialPopup, setShowTrialPopup] = useState(false);
   const [pendingView, setPendingView] = useState<AppView | null>(null);
-  const { isOnline, firebaseUser } = useApp();
+  const { isOnline, session } = useApp();
 
   const PRO_VIEWS = [AppView.DREAMS, AppView.BITACORAS, AppView.CHATBOT, AppView.COMMUNITY];
 
@@ -44,14 +43,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, us
     
     const now = Date.now();
     
-    if (firebaseUser) {
+    if (session?.user) {
       try {
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        await updateDoc(userRef, {
-          trialStartTime: now
-        });
+        await supabase
+          .from('profiles')
+          .update({ trial_start_time: new Date(now).toISOString() })
+          .eq('id', session.user.id);
       } catch (error) {
-        console.error('Error guardando trial en Firebase:', error);
+        console.error('Error guardando trial en Supabase:', error);
       }
     }
 

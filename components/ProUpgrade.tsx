@@ -7,7 +7,7 @@ type Plan = 'pro_mensual' | 'pro_anual' | 'donacion';
 const ProUpgrade: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
-  const { firebaseUser } = useApp();
+  const { session } = useApp();
 
   const handleStripeCheckout = (plan: Plan) => {
     setIsLoading(true);
@@ -19,7 +19,7 @@ const ProUpgrade: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
       donacion: 'https://donate.stripe.com/dRm28j0Lw08R4806mM7kc04'
     };
 
-    const checkoutUrl = firebaseUser ? `${links[plan]}?client_reference_id=${firebaseUser.uid}` : links[plan];
+    const checkoutUrl = session?.user ? `${links[plan]}?client_reference_id=${session.user.id}` : links[plan];
     window.location.href = checkoutUrl;
   };
 

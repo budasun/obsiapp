@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.99.3",
     "firebase": "^12.9.0",
     "groq-sdk": "^0.37.0",
     "lucide-react": "^0.556.0",

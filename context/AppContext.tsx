@@ -1,13 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { UserProfile, AppView } from '../types';
-import { auth, db } from '../services/firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { supabase } from '../src/lib/supabaseClient';
+import { Session, User } from '@supabase/supabase-js';
 
 interface AppContextType {
   user: UserProfile | null;
   setUser: (user: UserProfile | null) => void;
-  firebaseUser: FirebaseUser | null;
+  session: Session | null;
   currentView: AppView;
   setCurrentView: (view: AppView) => void;
   isLoading: boolean;
@@ -21,9 +20,8 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
-
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
+  const [session, setSession] = useState<Session | null>(null);
+  const [currentView, setCurrentView] = useState<AppView>(AppView.LOGIN);
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [bookUnlocked, setBookUnlocked] = useState<boolean>(() => {
@@ -37,83 +35,88 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     let isMounted = true;
 
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      try {
-        if (fbUser) {
-          const userRef = doc(db, 'users', fbUser.uid);
-          const docSnap = await getDoc(userRef);
-
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            const profileIsComplete = data.profileComplete === true && data.birthDate && data.lastPeriodDate;
-
-            const userData: UserProfile = {
-              name: data.name || fbUser.displayName || 'Viajera Lunar',
-              birthDate: data.birthDate || '',
-              lastPeriodDate: data.lastPeriodDate || '',
-              cycleLength: data.cycleLength || 28,
-              email: data.email || fbUser.email || '',
-              avatarUrl: data.avatarUrl || fbUser.photoURL || undefined,
-              isPremium: data.isPremium ?? false,
-              hasBook: data.hasBook ?? false,
-              trialStartTime: data.trialStartTime ?? undefined,
-            };
-            if (isMounted) {
-              if (profileIsComplete) {
-                // Perfil completo: entrar directo al dashboard
-                setUser(userData);
-                setCurrentView(AppView.DASHBOARD);
-              } else {
-                // Perfil incompleto: mandar al login para completar datos
-                setUser(null);
-                setCurrentView(AppView.LOGIN);
-              }
-            }
-          } else {
-            // Usuario nuevo - crear documento inicial
-            const initialData = {
-              name: fbUser.displayName || 'Viajera Lunar',
-              email: fbUser.email || '',
-              avatarUrl: fbUser.photoURL || '',
-              isPremium: false,
-              hasBook: false,
-              trialStartTime: null,
-              profileComplete: false,
-              createdAt: new Date().toISOString(),
-            };
-            await setDoc(userRef, initialData);
-            if (isMounted) {
-              // Nuevo usuario necesita completar perfil
-              setUser(null);
-              setCurrentView(AppView.LOGIN);
-            }
-          }
-        } else {
-          if (isMounted) {
-            setUser(null);
-            setCurrentView(AppView.LOGIN);
-          }
-        }
-      } catch (error) {
-        console.error('Error en autenticación:', error);
-        if (isMounted) {
-          // En caso de error, mandar al login
-          setUser(null);
-          setCurrentView(AppView.LOGIN);
-        }
-      } finally {
-        if (isMounted) {
-          setFirebaseUser(fbUser);
-          setIsLoading(false);
-        }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
+      setSession(session);
+      if (session?.user) {
+        loadUserProfile(session.user);
+      } else {
+        setUser(null);
+        setIsLoading(false);
       }
     });
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!isMounted) return;
+        setSession(session);
+        
+        if (event === 'SIGNED_IN' && session?.user) {
+          await loadUserProfile(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setCurrentView(AppView.LOGIN);
+          setIsLoading(false);
+        }
+      }
+    );
+
     return () => {
       isMounted = false;
-      unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
+
+  const loadUserProfile = async (authUser: User) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error cargando perfil:', error);
+        setUser(null);
+        setCurrentView(AppView.LOGIN);
+        setIsLoading(false);
+        return;
+      }
+
+      if (profile) {
+        const profileIsComplete = profile.profile_complete && profile.birth_date && profile.last_period_date;
+
+        const userData: UserProfile = {
+          name: profile.full_name || authUser.user_metadata?.full_name || 'Viajera Lunar',
+          birthDate: profile.birth_date || '',
+          lastPeriodDate: profile.last_period_date || '',
+          cycleLength: profile.cycle_length || 28,
+          email: profile.email || authUser.email || '',
+          avatarUrl: profile.avatar_url || authUser.user_metadata?.avatar_url || undefined,
+          isPremium: profile.is_premium ?? false,
+          hasBook: profile.has_book ?? false,
+          trialStartTime: profile.trial_start_time ?? undefined,
+        };
+
+        if (profileIsComplete) {
+          setUser(userData);
+          setCurrentView(AppView.DASHBOARD);
+        } else {
+          setUser(null);
+          setCurrentView(AppView.LOGIN);
+        }
+      } else {
+        setUser(null);
+        setCurrentView(AppView.LOGIN);
+      }
+    } catch (error) {
+      console.error('Error en autenticación:', error);
+      setUser(null);
+      setCurrentView(AppView.LOGIN);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -134,7 +137,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const handleLogout = async () => {
     try {
-      await auth.signOut();
+      await supabase.auth.signOut();
       setUser(null);
       setCurrentView(AppView.LOGIN);
     } catch (error) {
@@ -148,7 +151,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       value={{
         user,
         setUser,
-        firebaseUser,
+        session,
         currentView,
         setCurrentView,
         isLoading,

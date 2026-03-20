@@ -1,15 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, PrivateMessage } from '../types';
-import { db } from '../services/firebase';
-import {
-    collection,
-    addDoc,
-    onSnapshot,
-    query,
-    orderBy,
-    serverTimestamp,
-    Timestamp
-} from 'firebase/firestore';
+import { supabase } from '../src/lib/supabaseClient';
 import { Mail, Send, ArrowLeft, MessageCircle, Inbox, Users, Sparkles, Search } from 'lucide-react';
 
 interface MessagesProps {
@@ -42,10 +33,8 @@ const saveLocalMessages = (messages: PrivateMessage[]) => {
 };
 
 const Messages: React.FC<MessagesProps> = ({ user }) => {
-    // 1. CARGA INSTANTÁNEA: Leemos memoria local de inmediato
     const initialMessages = loadLocalMessages();
 
-    // Pre-calculamos las conversaciones para que la lista no salga vacía el primer segundo
     const initialConversations = initialMessages.reduce((acc: Record<string, PrivateMessage[]>, msg) => {
         const otherUser = msg.from === user.name ? msg.to : msg.from;
         if (!acc[otherUser]) acc[otherUser] = [];
@@ -56,7 +45,6 @@ const Messages: React.FC<MessagesProps> = ({ user }) => {
     const [messages, setMessages] = useState<PrivateMessage[]>(initialMessages);
     const [conversations, setConversations] = useState<Record<string, PrivateMessage[]>>(initialConversations);
 
-    // MAGIA UX: Si ya hay mensajes en caché, quitamos la pantalla de carga instantáneamente
     const [loading, setLoading] = useState<boolean>(initialMessages.length === 0);
 
     const [view, setView] = useState<'inbox' | 'directory'>('inbox');
@@ -65,98 +53,105 @@ const Messages: React.FC<MessagesProps> = ({ user }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [newMessage, setNewMessage] = useState('');
 
-    // 1. ESCUCHAR LOS MENSAJES PRIVADOS
     useEffect(() => {
-        // TEMPORIZADOR: Si Firebase tarda más de 2.5s, apagamos el loader y usamos lo local
         const fallbackTimer = setTimeout(() => {
             if (loading) setLoading(false);
         }, 2500);
 
-        const q = query(collection(db, 'private_messages'), orderBy('timestamp', 'desc'));
+        const loadMessages = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('private_messages')
+                    .select('*')
+                    .or(`to.eq.${user.name},from.eq.${user.name}`)
+                    .order('created_at', { ascending: false });
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            clearTimeout(fallbackTimer);
+                clearTimeout(fallbackTimer);
 
-            const messagesData = snapshot.docs.map(docData => {
-                const data = docData.data();
-                let formattedTime = 'Recién enviado';
-                if (data.timestamp instanceof Timestamp) {
-                    formattedTime = new Intl.DateTimeFormat('es-ES', {
+                if (error) throw error;
+
+                const messagesData = (data || []).map(msg => ({
+                    ...msg,
+                    id: msg.id,
+                    timestamp: msg.created_at ? new Intl.DateTimeFormat('es-ES', {
                         dateStyle: 'medium', timeStyle: 'short'
-                    }).format(data.timestamp.toDate());
-                }
+                    }).format(new Date(msg.created_at)) : 'Recién enviado',
+                    read: typeof msg.read === 'boolean' ? msg.read : false
+                })) as PrivateMessage[];
 
-                return {
-                    ...data,
-                    id: docData.id,
-                    timestamp: formattedTime,
-                    read: typeof data.read === 'boolean' ? data.read : false
-                } as PrivateMessage;
-            });
+                setMessages(messagesData);
+                saveLocalMessages(messagesData);
 
-            // Filtramos solo los mensajes de la usuaria actual
-            const userMessages = messagesData.filter(
-                m => m.to === user.name || m.from === user.name
-            );
+                const convs: Record<string, PrivateMessage[]> = {};
+                messagesData.forEach(msg => {
+                    const otherUser = msg.from === user.name ? msg.to : msg.from;
+                    if (!convs[otherUser]) convs[otherUser] = [];
+                    convs[otherUser].push(msg);
+                });
+                setConversations(convs);
+                setLoading(false);
+            } catch (error) {
+                console.error("Supabase desconectado para mensajes:", error);
+                clearTimeout(fallbackTimer);
+                setLoading(false);
+            }
+        };
 
-            setMessages(userMessages);
-            saveLocalMessages(userMessages);
+        loadMessages();
 
-            // Agrupamos por conversaciones
-            const convs: Record<string, PrivateMessage[]> = {};
-            userMessages.forEach(msg => {
-                const otherUser = msg.from === user.name ? msg.to : msg.from;
-                if (!convs[otherUser]) convs[otherUser] = [];
-                convs[otherUser].push(msg);
-            });
-            setConversations(convs);
-            setLoading(false);
-        }, (error) => {
-            console.error("Firebase desconectado para mensajes:", error);
-            clearTimeout(fallbackTimer);
-            setLoading(false);
-        });
+        const channel = supabase
+            .channel('messages_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'private_messages' }, () => {
+                loadMessages();
+            })
+            .subscribe();
 
         return () => {
             clearTimeout(fallbackTimer);
-            unsubscribe();
+            supabase.removeChannel(channel);
         };
     }, [user.name, loading]);
 
-    // 2. ESCUCHAR EL DIRECTORIO DE USUARIAS (Para la pestaña de "Ver Comunidad")
     useEffect(() => {
-        const qUsers = query(collection(db, 'users'), orderBy('name'));
-        const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
-            const usersList = snapshot.docs.map(doc => ({
-                id: doc.id,
-                name: doc.data().name,
-                avatarUrl: doc.data().avatarUrl
-            })) as DirectoryUser[];
-            setDirectoryUsers(usersList);
-        });
-        return () => unsubscribeUsers();
+        const loadDirectory = async () => {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, full_name, avatar_url')
+                .eq('profile_complete', true);
+
+            if (!error && data) {
+                setDirectoryUsers(data.map(u => ({
+                    id: u.id,
+                    name: u.full_name || 'Usuario',
+                    avatarUrl: u.avatar_url
+                })));
+            }
+        };
+        loadDirectory();
     }, []);
 
-    // 3. ENVIAR MENSAJE
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newMessage.trim() || !activeConversation) return;
 
         const msgContent = newMessage.trim();
-        setNewMessage(''); // Limpiamos rápido el input para que se sienta veloz
+        setNewMessage('');
 
         try {
-            await addDoc(collection(db, 'private_messages'), {
-                from: user.name,
-                fromName: user.name,
-                to: activeConversation,
-                toName: activeConversation,
-                content: msgContent,
-                timestamp: serverTimestamp(),
-                read: false
-            });
+            const { error } = await supabase
+                .from('private_messages')
+                .insert({
+                    from: user.name,
+                    from_name: user.name,
+                    to: activeConversation,
+                    to_name: activeConversation,
+                    content: msgContent,
+                    read: false
+                });
+
+            if (error) throw error;
         } catch (error) {
-            console.error("Error enviando mensaje a Firebase:", error);
+            console.error("Error enviando mensaje a Supabase:", error);
             alert("Hubo un error al enviar el mensaje. Verifica tu conexión.");
         }
     };
@@ -209,7 +204,6 @@ const Messages: React.FC<MessagesProps> = ({ user }) => {
                 </header>
             )}
 
-            {/* VISTA: BUZÓN */}
             {view === 'inbox' && !activeConversation && (
                 <div className="bg-white rounded-3xl shadow-xl border border-obsidian-100 overflow-hidden">
                     {conversationUsers.length === 0 ? (
@@ -258,7 +252,6 @@ const Messages: React.FC<MessagesProps> = ({ user }) => {
                 </div>
             )}
 
-            {/* VISTA: DIRECTORIO */}
             {view === 'directory' && !activeConversation && (
                 <div className="animate-fade-in space-y-6">
                     <div className="relative">
@@ -310,7 +303,6 @@ const Messages: React.FC<MessagesProps> = ({ user }) => {
                 </div>
             )}
 
-            {/* VISTA: CHAT ACTIVO (La sala de conversación) */}
             {activeConversation && (
                 <div className="bg-white rounded-3xl shadow-2xl border border-obsidian-100 overflow-hidden flex flex-col h-[70vh]">
                     <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-obsidian-50/50 backdrop-blur-sm z-10">

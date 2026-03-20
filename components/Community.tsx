@@ -2,21 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MOCK_COMMUNITY_POSTS } from '../constants';
 import { Users, Heart, MessageSquare, Tag, Send, Sparkles, Smile, Flame, Moon, Mail, X, Loader2 } from 'lucide-react';
 import { Comment, UserProfile, CommunityPost } from '../types';
-import { db } from '../services/firebase';
-import {
-    collection,
-    addDoc,
-    onSnapshot,
-    query,
-    orderBy,
-    serverTimestamp,
-    updateDoc,
-    doc,
-    arrayUnion,
-    increment,
-    Timestamp,
-    limit
-} from 'firebase/firestore';
+import { supabase } from '../src/lib/supabaseClient';
 
 interface CommunityProps {
     user: UserProfile;
@@ -42,15 +28,13 @@ const saveLocalPosts = (posts: CommunityPost[]) => {
 };
 
 const Community: React.FC<CommunityProps> = ({ user }) => {
-    // 1. CARGA INSTANTÁNEA: Cargamos los posts locales de inmediato.
     const initialPosts = loadLocalPosts();
     const [posts, setPosts] = useState<CommunityPost[]>(initialPosts);
 
-    // 2. MAGIA UX: Si ya hay posts locales, NO mostramos la pantalla de carga. Cargará en 0 segundos.
     const [loading, setLoading] = useState<boolean>(initialPosts.length === 0);
 
     const [error, setError] = useState<string | null>(null);
-    const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
+    const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false);
 
     const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState('');
@@ -67,72 +51,74 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
     });
 
     useEffect(() => {
-        // TEMPORIZADOR ANTI-CUELGUES: Máximo 2.5 segundos de carga.
         const fallbackTimer = setTimeout(() => {
             if (loading) setLoading(false);
         }, 2500);
 
-        const q = query(
-            collection(db, 'posts'),
-            orderBy('timestamp', 'desc'),
-            limit(25)
-        );
+        const loadPosts = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('posts')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(25);
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            clearTimeout(fallbackTimer);
+                clearTimeout(fallbackTimer);
 
-            const postsData = snapshot.docs.map(docData => {
-                const data = docData.data();
+                if (error) throw error;
 
-                let formattedTime = 'Recién publicado';
-                if (data.timestamp instanceof Timestamp) {
-                    formattedTime = new Intl.DateTimeFormat('es-ES', {
+                setIsSupabaseConnected(true);
+
+                const postsData = (data || []).map(post => ({
+                    id: post.id,
+                    author: post.author,
+                    content: post.content,
+                    tags: post.tags || [],
+                    likes: post.likes || 0,
+                    timestamp: post.created_at ? new Intl.DateTimeFormat('es-ES', {
                         dateStyle: 'medium',
                         timeStyle: 'short'
-                    }).format(data.timestamp.toDate());
-                }
+                    }).format(new Date(post.created_at)) : 'Recién publicado',
+                    comments: post.comments || []
+                })) as CommunityPost[];
 
-                const comments = Array.isArray(data.comments) ? data.comments : [];
+                const localPosts = loadLocalPosts();
+                const mockIds = MOCK_COMMUNITY_POSTS.map(p => p.id);
+                const localUserPosts = localPosts.filter(p => p.id.startsWith('local_') || mockIds.includes(p.id));
 
-                return {
-                    ...data,
-                    id: docData.id,
-                    timestamp: formattedTime,
-                    comments: comments,
-                    likes: typeof data.likes === 'number' ? data.likes : 0
-                };
-            }) as CommunityPost[];
+                const combinedPosts = postsData.length > 0
+                    ? [...postsData, ...localUserPosts.filter(lp => !postsData.some(fp => fp.id === lp.id))]
+                    : (localPosts.length > 0 ? localPosts : MOCK_COMMUNITY_POSTS);
 
-            setIsFirebaseConnected(true);
+                setPosts(combinedPosts);
+                saveLocalPosts(combinedPosts);
+                setLoading(false);
+                setError(null);
+            } catch (supabaseError) {
+                console.error("Error al conectar con Supabase:", supabaseError);
+                clearTimeout(fallbackTimer);
+                setIsSupabaseConnected(false);
 
-            // Mezclamos posts reales de Firebase con locales (evitando duplicados)
-            const localPosts = loadLocalPosts();
-            const mockIds = MOCK_COMMUNITY_POSTS.map(p => p.id);
-            const localUserPosts = localPosts.filter(p => p.id.startsWith('local_') || mockIds.includes(p.id));
+                const localPosts = loadLocalPosts();
+                setPosts(localPosts.length > 0 ? localPosts : MOCK_COMMUNITY_POSTS);
+                setLoading(false);
+            }
+        };
 
-            const combinedPosts = postsData.length > 0
-                ? [...postsData, ...localUserPosts.filter(lp => !postsData.some(fp => fp.id === lp.id))]
-                : (localPosts.length > 0 ? localPosts : MOCK_COMMUNITY_POSTS);
+        loadPosts();
 
-            setPosts(combinedPosts);
-            saveLocalPosts(combinedPosts);
-            setLoading(false);
-            setError(null);
-        }, (firebaseError) => {
-            console.error("Error al conectar con Firestore:", firebaseError);
-            clearTimeout(fallbackTimer);
-            setIsFirebaseConnected(false);
-
-            const localPosts = loadLocalPosts();
-            setPosts(localPosts.length > 0 ? localPosts : MOCK_COMMUNITY_POSTS);
-            setLoading(false);
-        });
+        const channel = supabase
+            .channel('posts_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
+                loadPosts();
+            })
+            .subscribe();
 
         return () => {
             clearTimeout(fallbackTimer);
-            unsubscribe();
+            supabase.removeChannel(channel);
         };
-    }, []); // Quitamos loading de dependencias para evitar bucles
+    }, []);
 
     useEffect(() => {
         localStorage.setItem('obsidiana_reactions', JSON.stringify(userReactions));
@@ -142,7 +128,6 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
         const previousReaction = userReactions[postId];
         const isLocal = postId.startsWith('local_') || postId.length < 15;
 
-        // Actualización Optimista en UI
         setPosts(prevPosts => prevPosts.map(post => {
             if (post.id === postId) {
                 let newLikes = post.likes;
@@ -156,7 +141,6 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
             return post;
         }));
 
-        // Actualizar estado de reacciones
         if (previousReaction === emoji) {
             const nextReactions = { ...userReactions };
             delete nextReactions[postId];
@@ -165,17 +149,18 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
             setUserReactions({ ...userReactions, [postId]: emoji });
         }
 
-        // Si no es local, enviar a Firebase
         if (!isLocal) {
-            const postRef = doc(db, 'posts', postId);
             try {
-                if (previousReaction === emoji) {
-                    await updateDoc(postRef, { likes: increment(-1) });
-                } else if (!previousReaction) {
-                    await updateDoc(postRef, { likes: increment(1) });
-                }
+                const newLikes = previousReaction === emoji
+                    ? (posts.find(p => p.id === postId)?.likes || 0) - 1
+                    : (posts.find(p => p.id === postId)?.likes || 0) + (previousReaction ? 0 : 1);
+
+                await supabase
+                    .from('posts')
+                    .update({ likes: Math.max(0, newLikes) })
+                    .eq('id', postId);
             } catch (error) {
-                console.error("Error updating reaction en Firebase:", error);
+                console.error("Error updating reaction en Supabase:", error);
             }
         }
     };
@@ -195,22 +180,24 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
             comments: []
         };
 
-        // UI Instantánea
         setPosts(prev => [newPost, ...prev]);
         setNewPostContent('');
         setSelectedTag('General');
 
         try {
-            await addDoc(collection(db, 'posts'), {
-                author: user.name,
-                content: newPost.content,
-                tags: newPost.tags,
-                likes: 0,
-                timestamp: serverTimestamp(),
-                comments: []
-            });
+            const { error } = await supabase
+                .from('posts')
+                .insert({
+                    author: user.name,
+                    content: newPost.content,
+                    tags: newPost.tags,
+                    likes: 0,
+                    comments: []
+                });
+
+            if (error) throw error;
         } catch (error) {
-            console.error("Error adding post a Firebase:", error);
+            console.error("Error adding post a Supabase:", error);
         }
     };
 
@@ -224,7 +211,6 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
             timestamp: new Intl.DateTimeFormat('es-ES', { timeStyle: 'short' }).format(new Date())
         };
 
-        // Actualización local
         const updatedPosts = posts.map(post => {
             if (post.id === postId) {
                 return { ...post, comments: [...post.comments, comment] };
@@ -235,15 +221,17 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
         saveLocalPosts(updatedPosts);
         setNewComment('');
 
-        // Firebase si no es local
         if (!postId.startsWith('local_') && postId.length >= 15) {
             try {
-                const postRef = doc(db, 'posts', postId);
-                await updateDoc(postRef, {
-                    comments: arrayUnion(comment)
-                });
+                const post = posts.find(p => p.id === postId);
+                if (post) {
+                    await supabase
+                        .from('posts')
+                        .update({ comments: [...post.comments, comment] })
+                        .eq('id', postId);
+                }
             } catch (error) {
-                console.error("Error adding comment a Firebase:", error);
+                console.error("Error adding comment a Supabase:", error);
             }
         }
     };
@@ -259,15 +247,19 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
 
         setIsSendingDM(true);
         try {
-            await addDoc(collection(db, 'private_messages'), {
-                from: user.name,
-                fromName: user.name,
-                to: dmRecipient,
-                toName: dmRecipient,
-                content: dmMessage.trim(),
-                timestamp: serverTimestamp(),
-                read: false
-            });
+            const { error } = await supabase
+                .from('private_messages')
+                .insert({
+                    from: user.name,
+                    from_name: user.name,
+                    to: dmRecipient,
+                    to_name: dmRecipient,
+                    content: dmMessage.trim(),
+                    read: false
+                });
+
+            if (error) throw error;
+
             setDmRecipient(null);
             setDmMessage('');
             alert(`Mensaje enviado a ${dmRecipient} con éxito.`);
@@ -289,7 +281,7 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
                 </div>
                 <h2 className="text-4xl font-serif text-obsidian-900 mb-2">Círculo de Mujeres</h2>
                 <p className="text-gray-600 italic">"Donde la palabra sana y el silencio escucha."</p>
-                {!isFirebaseConnected && !loading && (
+                {!isSupabaseConnected && !loading && (
                     <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-yellow-50 border border-yellow-200 rounded-full text-xs text-yellow-700">
                         <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
                         Modo offline - Conectando...
@@ -297,7 +289,6 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
                 )}
             </header>
 
-            {/* Formulario de Post */}
             <div className="bg-white p-6 rounded-3xl shadow-xl border border-obsidian-100 transform transition-all hover:shadow-2xl">
                 <form onSubmit={handleAddPost} className="space-y-4">
                     <div className="flex items-center space-x-3 mb-2">
@@ -458,7 +449,6 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
                 </div>
             )}
 
-            {/* Modal de DM */}
             {dmRecipient && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-obsidian-900/60 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl border border-obsidian-100" onClick={(e) => e.stopPropagation()}>

@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile } from '../types';
 import { Save, User, Calendar, Droplet, Camera, ShieldCheck } from 'lucide-react';
-import { db } from '../services/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { supabase } from '../src/lib/supabaseClient';
 
 interface UserProfileEditProps {
   user: UserProfile;
@@ -39,20 +38,27 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 1. Actualizamos el estado global (Context/LocalStorage)
     onUpdate(formData);
 
-    // 2. Guardamos a la usuaria en Firestore para que aparezca en el Directorio
     try {
-      // Usamos el nombre como ID (en un caso real sería el UID de Google, pero por ahora el nombre sirve de enlace)
-      const userRef = doc(db, 'users', formData.name);
-      await setDoc(userRef, {
-        name: formData.name,
-        avatarUrl: formData.avatarUrl || null,
-        joinDate: new Date().toISOString()
-      }, { merge: true }); // Merge evita borrar otros datos si ya existía
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        await supabase
+          .from('profiles')
+          .upsert({
+            id: authUser.id,
+            full_name: formData.name,
+            avatar_url: formData.avatarUrl || null,
+            birth_date: formData.birthDate,
+            last_period_date: formData.lastPeriodDate,
+            cycle_length: formData.cycleLength,
+            email: formData.email,
+            profile_complete: true,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+      }
     } catch (error) {
-      console.error("Error guardando usuaria en el directorio:", error);
+      console.error("Error guardando perfil en Supabase:", error);
     }
 
     setIsSaved(true);
@@ -67,7 +73,6 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
       </header>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] shadow-xl border border-obsidian-50 overflow-hidden transition-all duration-500 hover:shadow-2xl">
-        {/* Cover Photo Section */}
         <div
           className="h-48 relative bg-gradient-to-br from-obsidian-100 to-obsidian-200 group cursor-pointer overflow-hidden"
           onClick={() => coverInputRef.current?.click()}
@@ -84,7 +89,6 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
             <Camera size={24} />
           </div>
 
-          {/* Avatar Section */}
           <div className="absolute -bottom-12 left-8">
             <div
               className="relative group cursor-pointer"
@@ -111,7 +115,6 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
           <input type="file" ref={coverInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'cover')} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Name */}
             <div className="col-span-1 md:col-span-2">
               <label className="block text-[10px] font-bold text-obsidian-400 uppercase tracking-[0.2em] mb-3">
                 Identidad Sugerida
@@ -128,7 +131,6 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
               </div>
             </div>
 
-            {/* Birth Date */}
             <div>
               <label className="block text-[10px] font-bold text-obsidian-400 uppercase tracking-[0.2em] mb-3 leading-relaxed">
                 Fecha de Nacimiento <br /><span className="text-[8px] opacity-70">(Para cálculo astrológico)</span>
@@ -145,7 +147,6 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
               </div>
             </div>
 
-            {/* Last Period */}
             <div>
               <label className="block text-[10px] font-bold text-obsidian-400 uppercase tracking-[0.2em] mb-3">
                 Última Menstruación
@@ -162,7 +163,6 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
               </div>
             </div>
 
-            {/* Cycle Length */}
             <div className="col-span-1 md:col-span-2">
               <label className="block text-[10px] font-bold text-obsidian-400 uppercase tracking-[0.2em] mb-3">
                 Duración Promedio del Ciclo
