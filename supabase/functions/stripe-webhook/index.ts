@@ -15,22 +15,15 @@ const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
-async function activatePremium(userId: string, session?: Stripe.Checkout.Session) {
-  const updateData: Record<string, unknown> = {
-    id: userId,
-    is_premium: true,
-  };
-
-  if (session?.customer_details) {
-    updateData.email = session.customer_details.email || null;
-    updateData.full_name = session.customer_details.name || null;
-  }
-
+async function activatePremium(userId: string) {
   console.log(`👑 Activando membresía Premium para usuario: ${userId}`);
 
   const { error } = await supabaseAdmin
     .from("profiles")
-    .upsert(updateData, { onConflict: "id" });
+    .upsert(
+      { id: userId, is_premium: true },
+      { onConflict: "id" }
+    );
 
   if (error) {
     console.error(`❌ Error activando Premium: ${error.message}`);
@@ -41,22 +34,15 @@ async function activatePremium(userId: string, session?: Stripe.Checkout.Session
   return true;
 }
 
-async function activateBook(userId: string, session?: Stripe.Checkout.Session) {
-  const updateData: Record<string, unknown> = {
-    id: userId,
-    has_book: true,
-  };
-
-  if (session?.customer_details) {
-    updateData.email = session.customer_details.email || null;
-    updateData.full_name = session.customer_details.name || null;
-  }
-
+async function activateBook(userId: string) {
   console.log(`📚 Activando acceso al Libro para usuario: ${userId}`);
 
   const { error } = await supabaseAdmin
     .from("profiles")
-    .upsert(updateData, { onConflict: "id" });
+    .upsert(
+      { id: userId, has_book: true },
+      { onConflict: "id" }
+    );
 
   if (error) {
     console.error(`❌ Error activando Book: ${error.message}`);
@@ -67,15 +53,23 @@ async function activateBook(userId: string, session?: Stripe.Checkout.Session) {
   return true;
 }
 
-function isPremiumProduct(product: Stripe.Product): boolean {
-  return product.metadata?.product_type === "premium";
+async function getProductWithMetadata(productId: string): Promise<Stripe.Product | null> {
+  try {
+    const product = await stripe.products.retrieve(productId);
+    console.log(`🔍 Producto recuperado: ${productId}`);
+    console.log(`🔍 Metadata del producto: ${JSON.stringify(product.metadata)}`);
+    return product;
+  } catch (err) {
+    console.error(`❌ Error retrieving product ${productId}:`, err);
+    return null;
+  }
 }
 
-async function getUserIdFromSession(session: Stripe.Checkout.Session): Promise<string | null> {
+function extractUserId(session: Stripe.Checkout.Session): string | null {
   return session.client_reference_id || null;
 }
 
-async function getUserIdFromSubscription(subscription: Stripe.Subscription): Promise<string | null> {
+function extractUserIdFromSubscription(subscription: Stripe.Subscription): string | null {
   return (
     subscription.metadata?.client_reference_id ||
     subscription.metadata?.user_id ||
@@ -84,7 +78,7 @@ async function getUserIdFromSubscription(subscription: Stripe.Subscription): Pro
   );
 }
 
-async function getUserIdFromInvoice(invoice: Stripe.Invoice): Promise<string | null> {
+async function extractUserIdFromInvoice(invoice: Stripe.Invoice): Promise<string | null> {
   if (invoice.metadata?.client_reference_id) {
     return invoice.metadata.client_reference_id;
   }
@@ -92,11 +86,7 @@ async function getUserIdFromInvoice(invoice: Stripe.Invoice): Promise<string | n
   if (invoice.subscription && typeof invoice.subscription === "string") {
     try {
       const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-      return (
-        subscription.metadata?.client_reference_id ||
-        subscription.metadata?.user_id ||
-        null
-      );
+      return extractUserIdFromSubscription(subscription);
     } catch {
       return null;
     }
@@ -105,36 +95,16 @@ async function getUserIdFromInvoice(invoice: Stripe.Invoice): Promise<string | n
   return null;
 }
 
-async function getProductFromLineItem(item: Stripe.LineItem): Promise<Stripe.Product | null> {
-  if (item.price?.product && typeof item.price.product !== "string") {
-    return item.price.product as Stripe.Product;
+async function processProduct(userId: string, product: Stripe.Product) {
+  console.log(`🔍 Metadata detectada para [${userId}]: product_type = ${product.metadata?.product_type}`);
+
+  if (product.id === LIBRO_PRODUCT_ID) {
+    await activateBook(userId);
+  } else if (product.metadata?.product_type === "premium") {
+    await activatePremium(userId);
+  } else {
+    console.log(`📦 Producto no reconocido: ${product.id} (type: ${product.metadata?.product_type})`);
   }
-
-  if (item.price?.product && typeof item.price.product === "string") {
-    try {
-      return await stripe.products.retrieve(item.price.product);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-}
-
-async function getProductFromSubscriptionItem(item: Stripe.SubscriptionItem): Promise<Stripe.Product | null> {
-  if (item.price?.product && typeof item.price.product !== "string") {
-    return item.price.product as Stripe.Product;
-  }
-
-  if (item.price?.product && typeof item.price.product === "string") {
-    try {
-      return await stripe.products.retrieve(item.price.product);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
 }
 
 serve(async (req) => {
@@ -156,7 +126,7 @@ serve(async (req) => {
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
-      const userId = await getUserIdFromSession(session);
+      const userId = extractUserId(session);
 
       if (!userId) {
         console.warn("⚠️ checkout.session.completed sin client_reference_id");
@@ -166,17 +136,22 @@ serve(async (req) => {
         });
       }
 
+      console.log(`💰 Procesando checkout.session para userId: ${userId}`);
+
       if (session.line_items?.data) {
         for (const item of session.line_items.data) {
-          const product = await getProductFromLineItem(item);
+          let productId: string | null = null;
 
-          if (product) {
-            if (product.id === LIBRO_PRODUCT_ID) {
-              await activateBook(userId, session);
-            } else if (isPremiumProduct(product)) {
-              await activatePremium(userId, session);
-            } else {
-              console.log(`📦 Producto no reconocido: ${product.id}`);
+          if (item.price?.product) {
+            productId = typeof item.price.product === "string"
+              ? item.price.product
+              : item.price.product.id;
+          }
+
+          if (productId) {
+            const product = await getProductWithMetadata(productId);
+            if (product) {
+              await processProduct(userId, product);
             }
           }
         }
@@ -185,7 +160,7 @@ serve(async (req) => {
 
     else if (event.type === "invoice.paid") {
       const invoice = event.data.object as Stripe.Invoice;
-      const userId = await getUserIdFromInvoice(invoice);
+      const userId = await extractUserIdFromInvoice(invoice);
 
       if (!userId) {
         console.warn("⚠️ invoice.paid sin userId detectable");
@@ -195,46 +170,41 @@ serve(async (req) => {
         });
       }
 
-      if (invoice.subscription && typeof invoice.subscription !== "string") {
-        const subscription = invoice.subscription;
+      console.log(`💰 Procesando invoice.paid para userId: ${userId}`);
 
-        for (const item of subscription.items.data) {
-          const product = await getProductFromSubscriptionItem(item);
+      if (invoice.subscription) {
+        let subscription: Stripe.Subscription;
 
-          if (product) {
-            if (product.id === LIBRO_PRODUCT_ID) {
-              await activateBook(userId);
-            } else if (isPremiumProduct(product)) {
-              await activatePremium(userId);
-            }
-          }
-        }
-      } else if (invoice.subscription && typeof invoice.subscription === "string") {
-        try {
-          const subscription = await stripe.subscriptions.retrieve(invoice.subscription, {
+        if (typeof invoice.subscription === "string") {
+          subscription = await stripe.subscriptions.retrieve(invoice.subscription, {
             expand: ["items.data.price.product"],
           });
+        } else {
+          subscription = invoice.subscription;
+        }
 
-          for (const item of subscription.items.data) {
-            const product = await getProductFromSubscriptionItem(item);
+        for (const item of subscription.items.data) {
+          let productId: string | null = null;
 
+          if (item.price?.product) {
+            productId = typeof item.price.product === "string"
+              ? item.price.product
+              : item.price.product.id;
+          }
+
+          if (productId) {
+            const product = await getProductWithMetadata(productId);
             if (product) {
-              if (product.id === LIBRO_PRODUCT_ID) {
-                await activateBook(userId);
-              } else if (isPremiumProduct(product)) {
-                await activatePremium(userId);
-              }
+              await processProduct(userId, product);
             }
           }
-        } catch (err) {
-          console.error("Error procesando invoice.paid:", err);
         }
       }
     }
 
     else if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
       const subscription = event.data.object as Stripe.Subscription;
-      const userId = await getUserIdFromSubscription(subscription);
+      const userId = extractUserIdFromSubscription(subscription);
 
       if (!userId) {
         console.warn(`⚠️ ${event.type} sin userId en metadata`);
@@ -244,14 +214,21 @@ serve(async (req) => {
         });
       }
 
-      for (const item of subscription.items.data) {
-        const product = await getProductFromSubscriptionItem(item);
+      console.log(`💰 Procesando ${event.type} para userId: ${userId}`);
 
-        if (product) {
-          if (product.id === LIBRO_PRODUCT_ID) {
-            await activateBook(userId);
-          } else if (isPremiumProduct(product)) {
-            await activatePremium(userId);
+      for (const item of subscription.items.data) {
+        let productId: string | null = null;
+
+        if (item.price?.product) {
+          productId = typeof item.price.product === "string"
+            ? item.price.product
+            : item.price.product.id;
+        }
+
+        if (productId) {
+          const product = await getProductWithMetadata(productId);
+          if (product) {
+            await processProduct(userId, product);
           }
         }
       }
