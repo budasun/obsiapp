@@ -180,6 +180,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.setItem('obsidiana_book_unlocked', bookUnlocked.toString());
   }, [bookUnlocked]);
 
+  useEffect(() => {
+    let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && session?.user) {
+        refreshTimeout = setTimeout(async () => {
+          console.log('🔄 Refrescando perfil después de regreso de Stripe/pago...');
+          await loadUserProfile(session.user);
+        }, 1000);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+    };
+  }, [session]);
+
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
