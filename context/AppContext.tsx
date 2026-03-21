@@ -34,21 +34,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     let isMounted = true;
+    let hasLoaded = false;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!isMounted) return;
-      setSession(session);
-      if (session?.user) {
-        loadUserProfile(session.user);
-      } else {
-        setUser(null);
-        setIsLoading(false);
+    const initAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (!isMounted || hasLoaded) return;
+        hasLoaded = true;
+        
+        if (error) {
+          console.error('Error en getSession:', error);
+          setUser(null);
+          setCurrentView(AppView.LOGIN);
+          setIsLoading(false);
+          return;
+        }
+        
+        setSession(session);
+        
+        if (session?.user) {
+          await loadUserProfile(session.user);
+        } else {
+          setUser(null);
+          setCurrentView(AppView.LOGIN);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error('Error en initAuth:', err);
+        if (isMounted) {
+          setUser(null);
+          setCurrentView(AppView.LOGIN);
+          setIsLoading(false);
+        }
       }
-    });
+    };
+
+    initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (!isMounted) return;
+        if (!isMounted || !hasLoaded) return;
+        
         setSession(session);
         
         if (event === 'SIGNED_IN' && session?.user) {
@@ -57,12 +84,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setUser(null);
           setCurrentView(AppView.LOGIN);
           setIsLoading(false);
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          await loadUserProfile(session.user);
         }
       }
     );
 
+    const timeout = setTimeout(() => {
+      if (isMounted && hasLoaded === false) {
+        console.warn('Timeout en getSession, forzando salida de loading');
+        hasLoaded = true;
+        setUser(null);
+        setCurrentView(AppView.LOGIN);
+        setIsLoading(false);
+      }
+    }, 10000);
+
     return () => {
       isMounted = false;
+      hasLoaded = true;
+      clearTimeout(timeout);
       subscription.unsubscribe();
     };
   }, []);
