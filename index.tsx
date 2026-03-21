@@ -120,7 +120,7 @@ const AppContent: React.FC = () => {
   if (currentView === AppView.BOOK) {
     return (
       <BookLibrary 
-        isUnlocked={bookUnlocked} 
+        isUnlocked={user?.hasBook || bookUnlocked} 
         onUnlock={() => setBookUnlocked(true)} 
         onClose={() => setCurrentView(AppView.DASHBOARD)}
       />

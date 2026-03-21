@@ -139,6 +139,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           trialStartTime: profile.trial_start_time ?? undefined,
         };
 
+        if (profile.has_book) {
+          setBookUnlocked(true);
+        }
+
         if (profileIsComplete) {
           setUser(userData);
           setCurrentView(AppView.DASHBOARD);
