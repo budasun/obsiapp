@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "allowUnreachableCode": true,
+    "allowUnusedLabels": true,
+    "checkJs": false,
+    "lib": ["deno.window"],
+    "strict": false,
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "imports": {
+    "https://deno.land/std@0.168.0/": "https://deno.land/std@0.168.0/",
+    "https://esm.sh/": "https://esm.sh/"
+  },
+  "tasks": {
+    "dev": "deno run --allow-net --allow-env supabase/functions/stripe-webhook/index.ts",
+    "deploy": "supabase functions deploy stripe-webhook"
+  },
+  "lint": {
+    "include": ["supabase/functions/"],
+    "exclude": ["node_modules/", "dist/"]
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 80,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve"
+  },
+  "test": {
+    "include": ["supabase/functions/**"],
+    "exclude": ["node_modules/"]
+  }
+}
