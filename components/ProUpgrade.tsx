@@ -10,6 +10,11 @@ const ProUpgrade: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   const { session } = useApp();
 
   const handleStripeCheckout = (plan: Plan) => {
+    if (!session?.user) {
+      alert('Debes iniciar sesión antes de comprar');
+      return;
+    }
+
     setIsLoading(true);
     setSelectedPlan(plan);
     
@@ -19,7 +24,7 @@ const ProUpgrade: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
       donacion: 'https://donate.stripe.com/dRm28j0Lw08R4806mM7kc04'
     };
 
-    const checkoutUrl = session?.user ? `${links[plan]}?client_reference_id=${session.user.id}` : links[plan];
+    const checkoutUrl = `${links[plan]}?client_reference_id=${session.user.id}`;
     window.location.href = checkoutUrl;
   };
 

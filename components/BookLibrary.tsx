@@ -435,13 +435,18 @@ const BookLibrary: React.FC<{ isUnlocked: boolean; onUnlock?: () => void; onClos
     ];
 
     const handleStripeCheckout = (plan: Plan) => {
+      if (!session?.user) {
+        alert('Debes iniciar sesión antes de comprar');
+        return;
+      }
+
       setIsLoading(true);
       
       const links: Record<Plan, string> = {
         libro_solo: 'https://buy.stripe.com/8x27sD51McVDawo26w7kc02'
       };
 
-      const checkoutUrl = session?.user ? `${links[plan]}?client_reference_id=${session.user.id}` : links[plan];
+      const checkoutUrl = `${links[plan]}?client_reference_id=${session.user.id}`;
       window.location.href = checkoutUrl;
     };
 
