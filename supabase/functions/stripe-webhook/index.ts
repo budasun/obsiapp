@@ -140,24 +140,27 @@ serve(async (req) => {
 
     if (event.type === "customer.subscription.created") {
       const subscription = event.data.object as Stripe.Subscription;
-      
+
       console.log(`\n📨 CUSTOMER.SUBSCRIPTION.CREATED`);
       console.log(`📨 Subscription ID: ${subscription.id}`);
       console.log(`📨 Status: ${subscription.status}`);
-      console.log(`📨 Customer: ${subscription.customer}`);
 
       const supabaseAdmin = createClient(
         Deno.env.get("SUPABASE_URL") ?? "",
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
       );
 
+      let customerId: string | null = null;
       let customerEmail: string | null = null;
 
       if (typeof subscription.customer === "string") {
+        customerId = subscription.customer;
+        console.log(`📨 Customer ID: ${customerId}`);
+
         try {
-          const customer = await stripe.customers.retrieve(subscription.customer) as Stripe.Customer;
+          const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
           customerEmail = customer.email || null;
-          console.log(`📨 Customer Email: ${customerEmail}`);
+          console.log(`🔍 Buscando usuario para membresía por Customer ID: ${customerId} -> Email: ${customerEmail}`);
         } catch (err) {
           console.error(`❌ Error obteniendo customer:`, err);
         }
@@ -172,7 +175,7 @@ serve(async (req) => {
           .eq("email", customerEmail.toLowerCase())
           .single();
         userId = userData?.id || null;
-        console.log(`🔍 Usuario buscado por email ${customerEmail}: ${userId || "NO ENCONTRADO"}`);
+        console.log(`🔍 Usuario encontrado por email: ${userId || "NO ENCONTRADO"}`);
       }
 
       if (!userId) {
