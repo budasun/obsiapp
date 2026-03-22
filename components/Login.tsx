@@ -3,6 +3,7 @@ import { UserProfile, AppView } from '../types';
 import { Flower, Star, Loader2 } from 'lucide-react';
 import { supabase } from '../src/lib/supabaseClient';
 import { validateUserProfile } from '../utils/validation';
+import { useApp } from '../context/AppContext';
 
 interface LoginProps {
   onLogin: (user: UserProfile) => void;
@@ -24,6 +25,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     password: '',
     avatarUrl: ''
   });
+  const { refreshSession } = useApp();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -137,6 +139,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
               trialStartTime: profile.trial_start_time ?? undefined,
             };
             onLogin(fullUser);
+            await refreshSession();
             onNavigate(AppView.DASHBOARD);
             return;
           }
@@ -220,6 +223,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     }
 
     onLogin(user);
+    await refreshSession();
     onNavigate(AppView.DASHBOARD);
   };
 

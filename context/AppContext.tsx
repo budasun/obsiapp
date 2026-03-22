@@ -7,6 +7,7 @@ interface AppContextType {
   user: UserProfile | null;
   setUser: (user: UserProfile | null) => void;
   session: Session | null;
+  refreshSession: () => Promise<void>;
   currentView: AppView;
   setCurrentView: (view: AppView) => void;
   isLoading: boolean;
@@ -211,12 +212,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const refreshSession = async () => {
+    try {
+      const { data: { session: newSession } } = await supabase.auth.getSession();
+      setSession(newSession);
+      if (newSession?.user) {
+        await loadUserProfile(newSession.user);
+      }
+    } catch (error) {
+      console.error('Error refreshing session:', error);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
         user,
         setUser,
         session,
+        refreshSession,
         currentView,
         setCurrentView,
         isLoading,
