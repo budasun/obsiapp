@@ -8,9 +8,8 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
 
 const endpointSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
 
-const LIBRO_PRODUCT_ID = "prod_UAUdLWq6RAMf5F";
-const MENSUAL_PRODUCT_ID = "prod_UAUmlnCoj6k871";
-const ANUAL_PRODUCT_ID = "prod_UAUo8C4iYIaPv9";
+const LIBRO_PAYMENT_LINK_ID = "plink_1TCAKj0nE7s4s8Me6BavX8K1";
+const PREMIUM_PAYMENT_LINK_ID = "plink_1TCAJr0nE7s4s8Meuomfa6go";
 
 const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -18,6 +17,8 @@ const supabaseAdmin = createClient(
 );
 
 async function findUserIdByEmail(email: string): Promise<string | null> {
+  console.log(`🔍 Buscando usuario por email: ${email}`);
+
   const { data, error } = await supabaseAdmin
     .from("profiles")
     .select("id")
@@ -65,188 +66,50 @@ async function activateBook(userId: string) {
   return true;
 }
 
-async function processCheckoutSession(sessionId: string) {
+async function processEvent(event: Stripe.Event) {
   console.log(`\n========================================`);
-  console.log(`📨 CHECKOUT.SESSION.COMPLETED`);
+  console.log(`📨 NUEVO EVENTO: ${event.type}`);
   console.log(`========================================`);
-  console.log(`📨 Session ID: ${sessionId}`);
-
-  const session = await stripe.checkout.sessions.retrieve(sessionId, {
-    expand: ["line_items", "line_items.data.price.product"],
-  });
-
-  const clientRefId = session.client_reference_id;
-  const email = session.customer_details?.email || null;
-
-  console.log(`🔍 client_reference_id: ${clientRefId}`);
-  console.log(`🔍 customer_details.email: ${email}`);
-
-  let userId = clientRefId;
-  let resolvedEmail = email;
-
-  if (!userId && email) {
-    console.log(`🔍 Buscando usuario por email: ${email}`);
-    userId = await findUserIdByEmail(email);
-    resolvedEmail = email;
-  }
-
-  if (!userId) {
-    console.warn(`❌ NO SE PUDO IDENTIFICAR AL USUARIO`);
-    console.log(`========================================\n`);
-    return;
-  }
-
-  console.log(`✅ Usuario identificado: ${userId}`);
-
-  const lineItems = session.line_items?.data || [];
-  
-  if (lineItems.length === 0) {
-    console.warn(`⚠️ No se encontraron line_items`);
-    console.log(`========================================\n`);
-    return;
-  }
-
-  for (const item of lineItems) {
-    let productId: string | null = null;
-    let productName = "Unknown";
-
-    if (item.price?.product) {
-      if (typeof item.price.product === "string") {
-        productId = item.price.product;
-      } else {
-        productId = item.price.product.id;
-        productName = item.price.product.name || productId;
-      }
-    }
-
-    if (!productId) {
-      console.warn(`⚠️ No se pudo obtener productId del item`);
-      continue;
-    }
-
-    console.log(`🔍 DETECTADO: Usuario ${resolvedEmail} compró producto ${productId} (${productName})`);
-
-    if (productId === LIBRO_PRODUCT_ID) {
-      await activateBook(userId);
-    } else if (productId === MENSUAL_PRODUCT_ID || productId === ANUAL_PRODUCT_ID) {
-      await activatePremium(userId);
-    } else {
-      console.log(`📦 Producto no reconocido: ${productId}`);
-    }
-  }
-
-  console.log(`========================================\n`);
-}
-
-async function processInvoicePaid(invoice: Stripe.Invoice) {
-  console.log(`\n========================================`);
-  console.log(`📨 INVOICE.PAID`);
-  console.log(`========================================`);
-  console.log(`📨 Invoice ID: ${invoice.id}`);
-  console.log(`📨 Customer Email: ${invoice.customer_email}`);
 
   let userId: string | null = null;
-  let email: string | null = invoice.customer_email || null;
+  let paymentLinkId: string | null = null;
 
-  if (!email && invoice.subscription) {
-    try {
-      const subscription = typeof invoice.subscription === "string"
-        ? await stripe.subscriptions.retrieve(invoice.subscription)
-        : invoice.subscription;
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
 
-      userId = subscription.metadata?.client_reference_id || subscription.metadata?.user_id || null;
-      email = subscription.metadata?.customer_email || null;
+    console.log(`📨 Session ID: ${session.id}`);
+    console.log(`📨 Payment Link: ${session.payment_link}`);
+    console.log(`📨 Client Reference ID: ${session.client_reference_id}`);
+    console.log(`📨 Customer Email: ${session.customer_details?.email}`);
 
-      console.log(`🔍 Subscription metadata - userId: ${userId}, email: ${email}`);
-    } catch (err) {
-      console.error(`❌ Error obteniendo subscription:`, err);
+    paymentLinkId = session.payment_link || null;
+    userId = session.client_reference_id || null;
+
+    if (!userId && session.customer_details?.email) {
+      userId = await findUserIdByEmail(session.customer_details.email);
     }
-  }
 
-  if (!userId && email) {
-    userId = await findUserIdByEmail(email);
-  }
-
-  if (!userId) {
-    console.warn(`❌ NO SE PUDO IDENTIFICAR AL USUARIO`);
-    console.log(`========================================\n`);
-    return;
-  }
-
-  console.log(`✅ Usuario identificado: ${userId}`);
-
-  let productId: string | null = null;
-
-  if (invoice.subscription) {
-    try {
-      const subscription = typeof invoice.subscription === "string"
-        ? await stripe.subscriptions.retrieve(invoice.subscription, {
-            expand: ["items.data.price.product"],
-          })
-        : invoice.subscription;
-
-      const item = subscription.items.data[0];
-      if (item?.price?.product) {
-        productId = typeof item.price.product === "string"
-          ? item.price.product
-          : item.price.product.id;
-      }
-    } catch (err) {
-      console.error(`❌ Error obteniendo subscription:`, err);
+    if (!userId) {
+      console.log(`🔍 Intentando con email fijo: luzdegaspsico@gmail.com`);
+      userId = await findUserIdByEmail("luzdegaspsico@gmail.com");
     }
-  }
 
-  if (productId) {
-    console.log(`🔍 DETECTADO: Usuario ${email} compró producto ${productId}`);
+    if (!userId) {
+      console.warn(`❌ NO SE PUDO IDENTIFICAR AL USUARIO`);
+      console.log(`========================================\n`);
+      return;
+    }
 
-    if (productId === LIBRO_PRODUCT_ID) {
+    console.log(`✅ Usuario identificado: ${userId}`);
+
+    if (paymentLinkId === LIBRO_PAYMENT_LINK_ID) {
+      console.log(`🔍 Payment Link detectado: LIBRO`);
       await activateBook(userId);
-    } else if (productId === MENSUAL_PRODUCT_ID || productId === ANUAL_PRODUCT_ID) {
+    } else if (paymentLinkId === PREMIUM_PAYMENT_LINK_ID) {
+      console.log(`🔍 Payment Link detectado: PREMIUM`);
       await activatePremium(userId);
-    }
-  }
-
-  console.log(`========================================\n`);
-}
-
-async function processSubscriptionEvent(subscription: Stripe.Subscription, eventType: string) {
-  console.log(`\n========================================`);
-  console.log(`📨 ${eventType.toUpperCase()}`);
-  console.log(`========================================`);
-  console.log(`📨 Subscription ID: ${subscription.id}`);
-
-  const userId = subscription.metadata?.client_reference_id || subscription.metadata?.user_id || null;
-  const email = subscription.metadata?.customer_email || null;
-
-  console.log(`🔍 Metadata userId: ${userId}`);
-  console.log(`🔍 Metadata email: ${email}`);
-
-  let resolvedUserId = userId;
-
-  if (!resolvedUserId && email) {
-    resolvedUserId = await findUserIdByEmail(email);
-  }
-
-  if (!resolvedUserId) {
-    console.warn(`❌ NO SE PUDO IDENTIFICAR AL USUARIO`);
-    console.log(`========================================\n`);
-    return;
-  }
-
-  console.log(`✅ Usuario identificado: ${resolvedUserId}`);
-
-  const item = subscription.items.data[0];
-  if (item?.price?.product) {
-    const productId = typeof item.price.product === "string"
-      ? item.price.product
-      : item.price.product.id;
-
-    console.log(`🔍 DETECTADO: Usuario ${email} compró producto ${productId}`);
-
-    if (productId === LIBRO_PRODUCT_ID) {
-      await activateBook(resolvedUserId);
-    } else if (productId === MENSUAL_PRODUCT_ID || productId === ANUAL_PRODUCT_ID) {
-      await activatePremium(resolvedUserId);
+    } else {
+      console.log(`⚠️ Payment Link no reconocido: ${paymentLinkId}`);
     }
   }
 
@@ -268,32 +131,7 @@ serve(async (req) => {
       endpointSecret
     );
 
-    console.log(`\n########################################`);
-    console.log(`📨 NUEVO EVENTO: ${event.type}`);
-    console.log(`########################################`);
-
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      await processCheckoutSession(session.id);
-    }
-
-    else if (event.type === "invoice.paid") {
-      await processInvoicePaid(event.data.object as Stripe.Invoice);
-    }
-
-    else if (event.type === "customer.subscription.created") {
-      await processSubscriptionEvent(
-        event.data.object as Stripe.Subscription,
-        "customer.subscription.created"
-      );
-    }
-
-    else if (event.type === "customer.subscription.updated") {
-      await processSubscriptionEvent(
-        event.data.object as Stripe.Subscription,
-        "customer.subscription.updated"
-      );
-    }
+    await processEvent(event);
 
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
