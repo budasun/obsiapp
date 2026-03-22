@@ -8,35 +8,13 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
 
 const endpointSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
 
-const LIBRO_PRODUCT_ID = "prod_UAUdLWq6RAMf5F";
-const PREMIUM_PRODUCT_IDS = ["prod_UAUmlnCoj6k871", "prod_UAUo8C4iYIaPv9"];
+const STRIPE_PRODUCT_IDS = {
+  LIBRO: "prod_UAUdLWq6RAMf5F",
+  MENSUAL: "prod_UAUmlnCoj6k871",
+  ANUAL: "prod_UAUo8C4iYIaPv9",
+} as const;
 
-const supabaseAdmin = createClient(
-  Deno.env.get("SUPABASE_URL") ?? "",
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-);
-
-async function findUserByEmail(email: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
-    .from("profiles")
-    .select("id")
-    .eq("email", email.toLowerCase())
-    .single();
-
-  return data?.id || null;
-}
-
-async function activateField(userId: string, field: "is_premium" | "has_book") {
-  const { error } = await supabaseAdmin
-    .from("profiles")
-    .upsert({ id: userId, [field]: true }, { onConflict: "id" });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  console.log(`✅ Éxito: ${field} puesto en TRUE.`);
-}
+type ProductType = keyof typeof STRIPE_PRODUCT_IDS;
 
 serve(async (req) => {
   const signature = req.headers.get("stripe-signature");
@@ -54,44 +32,105 @@ serve(async (req) => {
     );
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
+      const session = await stripe.checkout.sessions.retrieve(
+        (event.data.object as Stripe.Checkout.Session).id,
+        {
+          expand: ["line_items", "line_items.data.price.product"],
+        }
+      );
 
       let userId = session.client_reference_id;
-      const email = session.customer_details?.email || null;
 
-      if (!userId && email) {
-        userId = await findUserByEmail(email);
+      if (!userId && session.customer_details?.email) {
+        const supabaseAdmin = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+        );
+        const email = session.customer_details.email;
+        const { data } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("email", email.toLowerCase())
+          .single();
+        userId = data?.id || null;
+        console.log(`🔍 Usuario buscado por email ${email}: ${userId || "NO ENCONTRADO"}`);
       }
 
       if (!userId) {
-        console.warn("⚠️ No se pudo identificar al usuario");
-        return new Response(JSON.stringify({ received: true }), { status: 200 });
+        console.warn("⚠️ checkout.session.completed sin client_reference_id ni email válido");
+        return new Response(JSON.stringify({ received: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }
 
-      const sessionExpanded = await stripe.checkout.sessions.retrieve(session.id, {
-        expand: ["line_items"],
-      });
+      console.log(`💰 Procesando pago para usuario: ${userId}`);
 
-      const lineItems = sessionExpanded.line_items?.data || [];
+      const updateData: Record<string, unknown> = {
+        email: session.customer_details?.email || null,
+        full_name: session.customer_details?.name || null,
+      };
 
-      for (const item of lineItems) {
-        const productId = typeof item.price?.product === "string"
-          ? item.price.product
-          : item.price?.product?.id;
+      let productsActivated: string[] = [];
 
-        if (!productId) continue;
+      if (session.line_items?.data) {
+        for (const item of session.line_items.data) {
+          const productId = (item.price?.product as Stripe.Product)?.id;
 
-        const isPremiumProduct = PREMIUM_PRODUCT_IDS.includes(productId);
-        const isLibroProduct = productId === LIBRO_PRODUCT_ID;
-
-        if (isLibroProduct) {
-          console.log(`🔍 Procesando Producto: ${productId} para el usuario: ${email || userId}`);
-          await activateField(userId, "has_book");
-        } else if (isPremiumProduct) {
-          console.log(`🔍 Procesando Producto: ${productId} para el usuario: ${email || userId}`);
-          await activateField(userId, "is_premium");
+          if (productId) {
+            if (productId === STRIPE_PRODUCT_IDS.LIBRO) {
+              updateData.has_book = true;
+              productsActivated.push("Libro (Huevo de Obsidiana)");
+            } else if (
+              productId === STRIPE_PRODUCT_IDS.MENSUAL ||
+              productId === STRIPE_PRODUCT_IDS.ANUAL
+            ) {
+              updateData.is_premium = true;
+              const plan =
+                productId === STRIPE_PRODUCT_IDS.MENSUAL
+                  ? "Membresía Mensual"
+                  : "Membresía Anual";
+              productsActivated.push(plan);
+            } else {
+              console.log(`📦 Producto desconocido: ${productId}`);
+            }
+          }
         }
       }
+
+      if (productsActivated.length === 0) {
+        console.log(`⚠️ No se reconocieron productos en la compra`);
+        return new Response(JSON.stringify({ received: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      );
+
+      const { error: upsertError } = await supabaseAdmin
+        .from("profiles")
+        .upsert(
+          {
+            id: userId,
+            ...updateData,
+          },
+          { onConflict: "id" }
+        );
+
+      if (upsertError) {
+        console.error(`❌ Error en UPSERT: ${upsertError.message}`);
+        return new Response(`Error: ${upsertError.message}`, {
+          status: 500,
+        });
+      }
+
+      console.log(
+        `✅ Success: Usuario ${userId} recibió: ${productsActivated.join(", ")}`
+      );
     }
 
     return new Response(JSON.stringify({ received: true }), {
@@ -99,7 +138,7 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err: any) {
-    console.error(`❌ Error: ${err.message}`);
+    console.error(`❌ Error en Webhook: ${err.message}`);
     return new Response(`Webhook Error: ${err.message}`, { status: 400 });
   }
 });
