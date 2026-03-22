@@ -138,6 +138,74 @@ serve(async (req) => {
       );
     }
 
+    if (event.type === "customer.subscription.created") {
+      const subscription = event.data.object as Stripe.Subscription;
+      
+      console.log(`\n📨 CUSTOMER.SUBSCRIPTION.CREATED`);
+      console.log(`📨 Subscription ID: ${subscription.id}`);
+      console.log(`📨 Status: ${subscription.status}`);
+      console.log(`📨 Customer: ${subscription.customer}`);
+
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      );
+
+      let customerEmail: string | null = null;
+
+      if (typeof subscription.customer === "string") {
+        try {
+          const customer = await stripe.customers.retrieve(subscription.customer) as Stripe.Customer;
+          customerEmail = customer.email || null;
+          console.log(`📨 Customer Email: ${customerEmail}`);
+        } catch (err) {
+          console.error(`❌ Error obteniendo customer:`, err);
+        }
+      }
+
+      let userId: string | null = null;
+
+      if (customerEmail) {
+        const { data: userData } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("email", customerEmail.toLowerCase())
+          .single();
+        userId = userData?.id || null;
+        console.log(`🔍 Usuario buscado por email ${customerEmail}: ${userId || "NO ENCONTRADO"}`);
+      }
+
+      if (!userId) {
+        console.warn(`⚠️ No se pudo identificar al usuario para la suscripción`);
+        return new Response(JSON.stringify({ received: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const subWithProduct = await stripe.subscriptions.retrieve(subscription.id, {
+        expand: ["items.data.price.product"],
+      });
+
+      const productId = (subWithProduct.items.data[0]?.price?.product as Stripe.Product)?.id;
+
+      console.log(`🔍 Product ID: ${productId}`);
+
+      if (productId === STRIPE_PRODUCT_IDS.MENSUAL || productId === STRIPE_PRODUCT_IDS.ANUAL) {
+        console.log(`👑 Activando is_premium=true para usuario: ${userId}`);
+
+        const { error: upsertError } = await supabaseAdmin
+          .from("profiles")
+          .upsert({ id: userId, is_premium: true }, { onConflict: "id" });
+
+        if (upsertError) {
+          console.error(`❌ Error en UPSERT: ${upsertError.message}`);
+        } else {
+          console.log(`✅ Success: Usuario ${userId} recibió Membresía Premium`);
+        }
+      }
+    }
+
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
