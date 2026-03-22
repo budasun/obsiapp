@@ -97,6 +97,12 @@ serve(async (req) => {
         }
       }
 
+      if (!updateData.is_premium && session.metadata?.product_type === 'premium') {
+        console.log("🔍 Activando por metadata: product_type=premium");
+        updateData.is_premium = true;
+        productsActivated.push("Membresía (vía Metadata)");
+      }
+
       if (productsActivated.length === 0) {
         console.log(`⚠️ No se reconocieron productos en la compra`);
         return new Response(JSON.stringify({ received: true }), {
