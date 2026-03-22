@@ -8,112 +8,34 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
 
 const endpointSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
 
-const LIBRO_PAYMENT_LINK_ID = "plink_1TCAKj0nE7s4s8Me6BavX8K1";
-const PREMIUM_PAYMENT_LINK_ID = "plink_1TCAJr0nE7s4s8Meuomfa6go";
+const LIBRO_PRODUCT_ID = "prod_UAUdLWq6RAMf5F";
+const PREMIUM_PRODUCT_IDS = ["prod_UAUmlnCoj6k871", "prod_UAUo8C4iYIaPv9"];
 
 const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
-async function findUserIdByEmail(email: string): Promise<string | null> {
-  console.log(`🔍 Buscando usuario por email: ${email}`);
-
-  const { data, error } = await supabaseAdmin
+async function findUserByEmail(email: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
     .from("profiles")
     .select("id")
     .eq("email", email.toLowerCase())
     .single();
 
-  if (error || !data) {
-    console.log(`⚠️ No se encontró usuario con email: ${email}`);
-    return null;
-  }
-
-  console.log(`✅ Usuario encontrado por email: ${data.id}`);
-  return data.id;
+  return data?.id || null;
 }
 
-async function activatePremium(userId: string) {
-  console.log(`👑 Activando is_premium=true para usuario: ${userId}`);
-
+async function activateField(userId: string, field: "is_premium" | "has_book") {
   const { error } = await supabaseAdmin
     .from("profiles")
-    .upsert({ id: userId, is_premium: true }, { onConflict: "id" });
+    .upsert({ id: userId, [field]: true }, { onConflict: "id" });
 
   if (error) {
-    console.error(`❌ Error en upsert Premium: ${error.message}`);
-    return false;
+    throw new Error(error.message);
   }
 
-  console.log(`✅ Premium activado para ${userId}`);
-  return true;
-}
-
-async function activateBook(userId: string) {
-  console.log(`📚 Activando has_book=true para usuario: ${userId}`);
-
-  const { error } = await supabaseAdmin
-    .from("profiles")
-    .upsert({ id: userId, has_book: true }, { onConflict: "id" });
-
-  if (error) {
-    console.error(`❌ Error en upsert Book: ${error.message}`);
-    return false;
-  }
-
-  console.log(`✅ Book activado para ${userId}`);
-  return true;
-}
-
-async function processEvent(event: Stripe.Event) {
-  console.log(`\n========================================`);
-  console.log(`📨 NUEVO EVENTO: ${event.type}`);
-  console.log(`========================================`);
-
-  let userId: string | null = null;
-  let paymentLinkId: string | null = null;
-
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
-
-    console.log(`📨 Session ID: ${session.id}`);
-    console.log(`📨 Payment Link: ${session.payment_link}`);
-    console.log(`📨 Client Reference ID: ${session.client_reference_id}`);
-    console.log(`📨 Customer Email: ${session.customer_details?.email}`);
-
-    paymentLinkId = session.payment_link || null;
-    userId = session.client_reference_id || null;
-
-    if (!userId && session.customer_details?.email) {
-      userId = await findUserIdByEmail(session.customer_details.email);
-    }
-
-    if (!userId) {
-      console.log(`🔍 Intentando con email fijo: luzdegaspsico@gmail.com`);
-      userId = await findUserIdByEmail("luzdegaspsico@gmail.com");
-    }
-
-    if (!userId) {
-      console.warn(`❌ NO SE PUDO IDENTIFICAR AL USUARIO`);
-      console.log(`========================================\n`);
-      return;
-    }
-
-    console.log(`✅ Usuario identificado: ${userId}`);
-
-    if (paymentLinkId === LIBRO_PAYMENT_LINK_ID) {
-      console.log(`🔍 Payment Link detectado: LIBRO`);
-      await activateBook(userId);
-    } else if (paymentLinkId === PREMIUM_PAYMENT_LINK_ID) {
-      console.log(`🔍 Payment Link detectado: PREMIUM`);
-      await activatePremium(userId);
-    } else {
-      console.log(`⚠️ Payment Link no reconocido: ${paymentLinkId}`);
-    }
-  }
-
-  console.log(`========================================\n`);
+  console.log(`✅ Éxito: ${field} puesto en TRUE.`);
 }
 
 serve(async (req) => {
@@ -131,14 +53,53 @@ serve(async (req) => {
       endpointSecret
     );
 
-    await processEvent(event);
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+
+      let userId = session.client_reference_id;
+      const email = session.customer_details?.email || null;
+
+      if (!userId && email) {
+        userId = await findUserByEmail(email);
+      }
+
+      if (!userId) {
+        console.warn("⚠️ No se pudo identificar al usuario");
+        return new Response(JSON.stringify({ received: true }), { status: 200 });
+      }
+
+      const sessionExpanded = await stripe.checkout.sessions.retrieve(session.id, {
+        expand: ["line_items"],
+      });
+
+      const lineItems = sessionExpanded.line_items?.data || [];
+
+      for (const item of lineItems) {
+        const productId = typeof item.price?.product === "string"
+          ? item.price.product
+          : item.price?.product?.id;
+
+        if (!productId) continue;
+
+        const isPremiumProduct = PREMIUM_PRODUCT_IDS.includes(productId);
+        const isLibroProduct = productId === LIBRO_PRODUCT_ID;
+
+        if (isLibroProduct) {
+          console.log(`🔍 Procesando Producto: ${productId} para el usuario: ${email || userId}`);
+          await activateField(userId, "has_book");
+        } else if (isPremiumProduct) {
+          console.log(`🔍 Procesando Producto: ${productId} para el usuario: ${email || userId}`);
+          await activateField(userId, "is_premium");
+        }
+      }
+    }
 
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   } catch (err: any) {
-    console.error(`❌ Error en Webhook: ${err.message}`);
+    console.error(`❌ Error: ${err.message}`);
     return new Response(`Webhook Error: ${err.message}`, { status: 400 });
   }
 });
