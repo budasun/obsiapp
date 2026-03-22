@@ -9,11 +9,33 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
 const endpointSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
 
 const LIBRO_PRODUCT_ID = "prod_UAUdLWq6RAMf5F";
+const PREMIUM_PRODUCT_IDS = [
+  "prod_UAUo8C4iYIaPv9",
+  "prod_UAUmlnCoj6k871",
+];
 
 const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
+
+async function findUserIdByEmail(email: string): Promise<string | null> {
+  console.log(`🔍 Buscando usuario por email: ${email}`);
+
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .single();
+
+  if (error || !data) {
+    console.log(`⚠️ No se encontró usuario con email: ${email}`);
+    return null;
+  }
+
+  console.log(`✅ Usuario encontrado por email: ${data.id}`);
+  return data.id;
+}
 
 async function activatePremium(userId: string) {
   console.log(`👑 Activando membresía Premium para usuario: ${userId}`);
@@ -95,15 +117,20 @@ async function extractUserIdFromInvoice(invoice: Stripe.Invoice): Promise<string
   return null;
 }
 
-async function processProduct(userId: string, product: Stripe.Product) {
-  console.log(`🔍 Metadata detectada para [${userId}]: product_type = ${product.metadata?.product_type}`);
+function isPremiumProductId(productId: string): boolean {
+  return PREMIUM_PRODUCT_IDS.includes(productId);
+}
+
+async function processProduct(userId: string, product: Stripe.Product, fallbackById: boolean = false) {
+  const productType = product.metadata?.product_type;
+  console.log(`🔍 Metadata detectada para [${userId}]: product_type = ${productType}`);
 
   if (product.id === LIBRO_PRODUCT_ID) {
     await activateBook(userId);
-  } else if (product.metadata?.product_type === "premium") {
+  } else if (productType === "premium" || (fallbackById && isPremiumProductId(product.id))) {
     await activatePremium(userId);
   } else {
-    console.log(`📦 Producto no reconocido: ${product.id} (type: ${product.metadata?.product_type})`);
+    console.log(`📦 Producto no reconocido: ${product.id}`);
   }
 }
 
@@ -126,10 +153,14 @@ serve(async (req) => {
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
-      const userId = extractUserId(session);
+      let userId = extractUserId(session);
+
+      if (!userId && session.customer_details?.email) {
+        userId = await findUserIdByEmail(session.customer_details.email);
+      }
 
       if (!userId) {
-        console.warn("⚠️ checkout.session.completed sin client_reference_id");
+        console.warn("⚠️ checkout.session.completed sin userId (client_reference_id ni email)");
         return new Response(JSON.stringify({ received: true }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -151,7 +182,8 @@ serve(async (req) => {
           if (productId) {
             const product = await getProductWithMetadata(productId);
             if (product) {
-              await processProduct(userId, product);
+              const fallbackById = isPremiumProductId(productId);
+              await processProduct(userId, product, fallbackById);
             }
           }
         }
@@ -160,7 +192,11 @@ serve(async (req) => {
 
     else if (event.type === "invoice.paid") {
       const invoice = event.data.object as Stripe.Invoice;
-      const userId = await extractUserIdFromInvoice(invoice);
+      let userId = await extractUserIdFromInvoice(invoice);
+
+      if (!userId && invoice.customer_email) {
+        userId = await findUserIdByEmail(invoice.customer_email);
+      }
 
       if (!userId) {
         console.warn("⚠️ invoice.paid sin userId detectable");
@@ -195,7 +231,8 @@ serve(async (req) => {
           if (productId) {
             const product = await getProductWithMetadata(productId);
             if (product) {
-              await processProduct(userId, product);
+              const fallbackById = isPremiumProductId(productId);
+              await processProduct(userId, product, fallbackById);
             }
           }
         }
@@ -204,7 +241,11 @@ serve(async (req) => {
 
     else if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
       const subscription = event.data.object as Stripe.Subscription;
-      const userId = extractUserIdFromSubscription(subscription);
+      let userId = extractUserIdFromSubscription(subscription);
+
+      if (!userId && subscription.metadata?.customer_email) {
+        userId = await findUserIdByEmail(subscription.metadata.customer_email);
+      }
 
       if (!userId) {
         console.warn(`⚠️ ${event.type} sin userId en metadata`);
@@ -228,7 +269,8 @@ serve(async (req) => {
         if (productId) {
           const product = await getProductWithMetadata(productId);
           if (product) {
-            await processProduct(userId, product);
+            const fallbackById = isPremiumProductId(productId);
+            await processProduct(userId, product, fallbackById);
           }
         }
       }
