@@ -97,10 +97,10 @@ serve(async (req) => {
         }
       }
 
-      if (!updateData.is_premium && session.metadata?.product_type === 'premium') {
-        console.log("🔍 Activando por metadata: product_type=premium");
+      if (!updateData.is_premium && session.metadata?.product_type === "premium") {
+        console.log("🔍 Respaldo: Activando Membresía por Metadata");
         updateData.is_premium = true;
-        productsActivated.push("Membresía (vía Metadata)");
+        productsActivated.push("Membresía (Metadata)");
       }
 
       if (productsActivated.length === 0) {
