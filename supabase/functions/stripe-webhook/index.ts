@@ -9,10 +9,8 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
 const endpointSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
 
 const LIBRO_PRODUCT_ID = "prod_UAUdLWq6RAMf5F";
-const PREMIUM_PRODUCT_IDS = [
-  "prod_UAUo8C4iYIaPv9",
-  "prod_UAUmlnCoj6k871",
-];
+const MENSUAL_PRODUCT_ID = "prod_UAUmlnCoj6k871";
+const ANUAL_PRODUCT_ID = "prod_UAUo8C4iYIaPv9";
 
 const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -20,8 +18,6 @@ const supabaseAdmin = createClient(
 );
 
 async function findUserIdByEmail(email: string): Promise<string | null> {
-  console.log(`🔍 Buscando usuario por email: ${email}`);
-
   const { data, error } = await supabaseAdmin
     .from("profiles")
     .select("id")
@@ -42,10 +38,7 @@ async function activatePremium(userId: string) {
 
   const { error } = await supabaseAdmin
     .from("profiles")
-    .upsert(
-      { id: userId, is_premium: true },
-      { onConflict: "id" }
-    );
+    .upsert({ id: userId, is_premium: true }, { onConflict: "id" });
 
   if (error) {
     console.error(`❌ Error activando Premium: ${error.message}`);
@@ -61,10 +54,7 @@ async function activateBook(userId: string) {
 
   const { error } = await supabaseAdmin
     .from("profiles")
-    .upsert(
-      { id: userId, has_book: true },
-      { onConflict: "id" }
-    );
+    .upsert({ id: userId, has_book: true }, { onConflict: "id" });
 
   if (error) {
     console.error(`❌ Error activando Book: ${error.message}`);
@@ -75,63 +65,111 @@ async function activateBook(userId: string) {
   return true;
 }
 
-async function getProductWithMetadata(productId: string): Promise<Stripe.Product | null> {
-  try {
-    const product = await stripe.products.retrieve(productId);
-    console.log(`🔍 Producto recuperado: ${productId}`);
-    console.log(`🔍 Metadata del producto: ${JSON.stringify(product.metadata)}`);
-    return product;
-  } catch (err) {
-    console.error(`❌ Error retrieving product ${productId}:`, err);
-    return null;
+function isLibroProduct(productId: string): boolean {
+  return productId === LIBRO_PRODUCT_ID;
+}
+
+function isMembresiaProduct(productId: string): boolean {
+  return productId === MENSUAL_PRODUCT_ID || productId === ANUAL_PRODUCT_ID;
+}
+
+function getProductName(productId: string): string {
+  if (productId === LIBRO_PRODUCT_ID) return "Libro";
+  if (productId === MENSUAL_PRODUCT_ID) return "Membresía Mensual";
+  if (productId === ANUAL_PRODUCT_ID) return "Membresía Anual";
+  return "Producto Desconocido";
+}
+
+async function processPayment(userId: string | null, email: string | null, productId: string) {
+  if (!userId && email) {
+    userId = await findUserIdByEmail(email);
+  }
+
+  if (!userId) {
+    console.warn(`⚠️ No se pudo identificar al usuario para producto: ${productId}`);
+    return;
+  }
+
+  if (isLibroProduct(productId)) {
+    await activateBook(userId);
+  } else if (isMembresiaProduct(productId)) {
+    await activatePremium(userId);
   }
 }
 
-function extractUserId(session: Stripe.Checkout.Session): string | null {
-  return session.client_reference_id || null;
-}
+async function processCheckoutSession(session: Stripe.Checkout.Session) {
+  const userId = session.client_reference_id;
+  const email = session.customer_details?.email;
+  const productId = (session.line_items?.data[0]?.price?.product as string) || null;
 
-function extractUserIdFromSubscription(subscription: Stripe.Subscription): string | null {
-  return (
-    subscription.metadata?.client_reference_id ||
-    subscription.metadata?.user_id ||
-    subscription.metadata?.customer_id ||
-    null
-  );
-}
+  console.log(`📨 checkout.session.completed - userId: ${userId}, email: ${email}, productId: ${productId}`);
 
-async function extractUserIdFromInvoice(invoice: Stripe.Invoice): Promise<string | null> {
-  if (invoice.metadata?.client_reference_id) {
-    return invoice.metadata.client_reference_id;
+  if (!productId) {
+    console.warn("⚠️ No se encontró productId en line_items");
+    return;
   }
 
-  if (invoice.subscription && typeof invoice.subscription === "string") {
-    try {
-      const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-      return extractUserIdFromSubscription(subscription);
-    } catch {
-      return null;
+  await processPayment(userId, email, productId);
+}
+
+async function processInvoicePaid(invoice: Stripe.Invoice) {
+  let userId: string | null = null;
+  let email: string | null = invoice.customer_email || null;
+  let productId: string | null = null;
+
+  console.log(`📨 invoice.paid - customer_email: ${email}`);
+
+  if (invoice.subscription) {
+    let subscription: Stripe.Subscription;
+
+    if (typeof invoice.subscription === "string") {
+      subscription = await stripe.subscriptions.retrieve(invoice.subscription, {
+        expand: ["items.data.price.product"],
+      });
+    } else {
+      subscription = invoice.subscription;
+    }
+
+    userId = subscription.metadata?.client_reference_id || subscription.metadata?.user_id || null;
+
+    if (!userId && subscription.metadata?.customer_email) {
+      email = subscription.metadata.customer_email;
+    }
+
+    if (subscription.items.data[0]?.price?.product) {
+      productId = typeof subscription.items.data[0].price.product === "string"
+        ? subscription.items.data[0].price.product
+        : subscription.items.data[0].price.product.id;
     }
   }
 
-  return null;
-}
+  console.log(`📨 invoice.paid - resolved userId: ${userId}, email: ${email}, productId: ${productId}`);
 
-function isPremiumProductId(productId: string): boolean {
-  return PREMIUM_PRODUCT_IDS.includes(productId);
-}
-
-async function processProduct(userId: string, product: Stripe.Product, fallbackById: boolean = false) {
-  const productType = product.metadata?.product_type;
-  console.log(`🔍 Metadata detectada para [${userId}]: product_type = ${productType}`);
-
-  if (product.id === LIBRO_PRODUCT_ID) {
-    await activateBook(userId);
-  } else if (productType === "premium" || (fallbackById && isPremiumProductId(product.id))) {
-    await activatePremium(userId);
-  } else {
-    console.log(`📦 Producto no reconocido: ${product.id}`);
+  if (!userId && email) {
+    console.log(`🔍 Buscando usuario para activar ${getProductName(productId || "")} por Email: ${email}`);
   }
+
+  await processPayment(userId, email, productId || "");
+}
+
+async function processSubscriptionEvent(subscription: Stripe.Subscription, eventType: string) {
+  const userId = subscription.metadata?.client_reference_id || subscription.metadata?.user_id || null;
+  const email = subscription.metadata?.customer_email || null;
+
+  let productId: string | null = null;
+  if (subscription.items.data[0]?.price?.product) {
+    productId = typeof subscription.items.data[0].price.product === "string"
+      ? subscription.items.data[0].price.product
+      : subscription.items.data[0].price.product.id;
+  }
+
+  console.log(`📨 ${eventType} - userId: ${userId}, email: ${email}, productId: ${productId}`);
+
+  if (!userId && email) {
+    console.log(`🔍 Buscando usuario para activar ${getProductName(productId || "")} por Email: ${email}`);
+  }
+
+  await processPayment(userId, email, productId || "");
 }
 
 serve(async (req) => {
@@ -149,132 +187,32 @@ serve(async (req) => {
       endpointSecret
     );
 
-    console.log(`📨 Evento recibido: ${event.type}`);
+    console.log(`\n========== NUEVO EVENTO ==========`);
+    console.log(`📨 Tipo: ${event.type}`);
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      let userId = extractUserId(session);
-
-      if (!userId && session.customer_details?.email) {
-        userId = await findUserIdByEmail(session.customer_details.email);
-      }
-
-      if (!userId) {
-        console.warn("⚠️ checkout.session.completed sin userId (client_reference_id ni email)");
-        return new Response(JSON.stringify({ received: true }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      console.log(`💰 Procesando checkout.session para userId: ${userId}`);
-
-      if (session.line_items?.data) {
-        for (const item of session.line_items.data) {
-          let productId: string | null = null;
-
-          if (item.price?.product) {
-            productId = typeof item.price.product === "string"
-              ? item.price.product
-              : item.price.product.id;
-          }
-
-          if (productId) {
-            const product = await getProductWithMetadata(productId);
-            if (product) {
-              const fallbackById = isPremiumProductId(productId);
-              await processProduct(userId, product, fallbackById);
-            }
-          }
-        }
-      }
+      await processCheckoutSession(event.data.object as Stripe.Checkout.Session);
     }
 
     else if (event.type === "invoice.paid") {
-      const invoice = event.data.object as Stripe.Invoice;
-      let userId = await extractUserIdFromInvoice(invoice);
-
-      if (!userId && invoice.customer_email) {
-        userId = await findUserIdByEmail(invoice.customer_email);
-      }
-
-      if (!userId) {
-        console.warn("⚠️ invoice.paid sin userId detectable");
-        return new Response(JSON.stringify({ received: true }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      console.log(`💰 Procesando invoice.paid para userId: ${userId}`);
-
-      if (invoice.subscription) {
-        let subscription: Stripe.Subscription;
-
-        if (typeof invoice.subscription === "string") {
-          subscription = await stripe.subscriptions.retrieve(invoice.subscription, {
-            expand: ["items.data.price.product"],
-          });
-        } else {
-          subscription = invoice.subscription;
-        }
-
-        for (const item of subscription.items.data) {
-          let productId: string | null = null;
-
-          if (item.price?.product) {
-            productId = typeof item.price.product === "string"
-              ? item.price.product
-              : item.price.product.id;
-          }
-
-          if (productId) {
-            const product = await getProductWithMetadata(productId);
-            if (product) {
-              const fallbackById = isPremiumProductId(productId);
-              await processProduct(userId, product, fallbackById);
-            }
-          }
-        }
-      }
+      await processInvoicePaid(event.data.object as Stripe.Invoice);
     }
 
-    else if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
-      const subscription = event.data.object as Stripe.Subscription;
-      let userId = extractUserIdFromSubscription(subscription);
-
-      if (!userId && subscription.metadata?.customer_email) {
-        userId = await findUserIdByEmail(subscription.metadata.customer_email);
-      }
-
-      if (!userId) {
-        console.warn(`⚠️ ${event.type} sin userId en metadata`);
-        return new Response(JSON.stringify({ received: true }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      console.log(`💰 Procesando ${event.type} para userId: ${userId}`);
-
-      for (const item of subscription.items.data) {
-        let productId: string | null = null;
-
-        if (item.price?.product) {
-          productId = typeof item.price.product === "string"
-            ? item.price.product
-            : item.price.product.id;
-        }
-
-        if (productId) {
-          const product = await getProductWithMetadata(productId);
-          if (product) {
-            const fallbackById = isPremiumProductId(productId);
-            await processProduct(userId, product, fallbackById);
-          }
-        }
-      }
+    else if (event.type === "customer.subscription.created") {
+      await processSubscriptionEvent(
+        event.data.object as Stripe.Subscription,
+        "customer.subscription.created"
+      );
     }
+
+    else if (event.type === "customer.subscription.updated") {
+      await processSubscriptionEvent(
+        event.data.object as Stripe.Subscription,
+        "customer.subscription.updated"
+      );
+    }
+
+    console.log(`========== FIN EVENTO ==========\n`);
 
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
