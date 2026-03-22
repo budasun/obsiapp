@@ -1,19 +1,23 @@
 import React, { useState } from 'react';
 import { Sparkles, Check, Crown, Heart, Flame, ArrowLeft } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { supabase } from '../src/lib/supabaseClient';
 
 type Plan = 'pro_mensual' | 'pro_anual' | 'donacion';
 
 const ProUpgrade: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
-  const { session } = useApp();
 
-  const handleStripeCheckout = (plan: Plan) => {
-    if (!session?.user) {
+  const handleStripeCheckout = async (plan: Plan) => {
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !authUser) {
       alert('Debes iniciar sesión antes de comprar');
       return;
     }
+
+    const userId = authUser.id;
+    const userEmail = authUser.email;
 
     setIsLoading(true);
     setSelectedPlan(plan);
@@ -24,7 +28,7 @@ const ProUpgrade: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
       donacion: 'https://donate.stripe.com/dRm28j0Lw08R4806mM7kc04'
     };
 
-    const checkoutUrl = `${links[plan]}?client_reference_id=${session.user.id}`;
+    const checkoutUrl = `${links[plan]}?client_reference_id=${userId}&customer_email=${userEmail}`;
     window.location.href = checkoutUrl;
   };
 
