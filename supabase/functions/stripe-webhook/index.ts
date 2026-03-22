@@ -42,18 +42,17 @@ serve(async (req) => {
       let userId = session.client_reference_id;
 
       if (!userId && session.customer_details?.email) {
+        console.log("🔍 ID no encontrado, buscando usuario por email...");
         const supabaseAdmin = createClient(
           Deno.env.get("SUPABASE_URL") ?? "",
           Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
         );
-        const email = session.customer_details.email;
-        const { data } = await supabaseAdmin
+        const { data: userData } = await supabaseAdmin
           .from("profiles")
           .select("id")
-          .eq("email", email.toLowerCase())
+          .eq("email", session.customer_details.email.toLowerCase())
           .single();
-        userId = data?.id || null;
-        console.log(`🔍 Usuario buscado por email ${email}: ${userId || "NO ENCONTRADO"}`);
+        userId = userData?.id || null;
       }
 
       if (!userId) {
