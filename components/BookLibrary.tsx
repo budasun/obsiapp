@@ -435,25 +435,37 @@ const BookLibrary: React.FC<{ isUnlocked: boolean; onUnlock?: () => void; onClos
       { src: '/cap1.png', alt: 'Primer capítulo' }
     ];
 
-    const handleStripeCheckout = async (plan: Plan) => {
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !authUser) {
-        alert('Debes iniciar sesión antes de comprar');
-        return;
+    const handleStripeCheckout = async (plan: any) => {
+      try {
+        console.log("🔍 Iniciando checkout para el plan:", plan);
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError || !authUser) {
+          alert('Debes iniciar sesión antes de comprar');
+          return;
+        }
+        
+        setIsLoading(true);
+        
+        const link = plan === 'libro_solo' || plan === 'libro' 
+          ? 'https://buy.stripe.com/8x27sD51McVDawo26w7kc02' 
+          : null;
+          
+        if (!link) {
+          console.error("❌ No se encontró el enlace de Stripe para el plan:", plan);
+          alert("Error de configuración en el enlace de pago.");
+          setIsLoading(false);
+          return;
+        }
+        
+        const checkoutUrl = `${link}?client_reference_id=${authUser.id}&customer_email=${authUser.email}`;
+        console.log("🚀 Redirigiendo a Stripe:", checkoutUrl);
+        window.location.href = checkoutUrl;
+        
+      } catch (err) {
+        console.error("❌ Error en checkout:", err);
+        setIsLoading(false);
       }
-
-      const userId = authUser.id;
-      const userEmail = authUser.email;
-
-      setIsLoading(true);
-      
-      const links: Record<Plan, string> = {
-        libro_solo: 'https://buy.stripe.com/8x27sD51McVDawo26w7kc02'
-      };
-
-      const checkoutUrl = `${links[plan]}?client_reference_id=${userId}&customer_email=${userEmail}`;
-      window.location.href = checkoutUrl;
     };
 
     return (
