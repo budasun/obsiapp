@@ -71,7 +71,7 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
 
                 const postsData = (data || []).map(post => ({
                     id: post.id,
-                    author: post.author,
+                    author: post.author_name,
                     content: post.content,
                     tags: post.tags || [],
                     likes: post.likes || 0,
@@ -188,7 +188,7 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
             const { error } = await supabase
                 .from('posts')
                 .insert({
-                    author: user.name,
+                    author_name: user.name,
                     content: newPost.content,
                     tags: newPost.tags,
                     likes: 0,
