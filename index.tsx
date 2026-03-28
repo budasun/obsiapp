@@ -4,6 +4,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 import OfflineBanner from './components/OfflineBanner';
+import InstallBanner from './components/InstallBanner';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import BookLibrary from './components/BookLibrary';
@@ -144,6 +145,7 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <AppProvider>
         <OfflineBanner />
+        <InstallBanner />
         <AppContent />
       </AppProvider>
     </ErrorBoundary>
