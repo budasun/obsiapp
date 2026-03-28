@@ -75,8 +75,7 @@ const Messages: React.FC<MessagesProps> = ({ user }) => {
                     id: msg.id,
                     timestamp: msg.created_at ? new Intl.DateTimeFormat('es-ES', {
                         dateStyle: 'medium', timeStyle: 'short'
-                    }).format(new Date(msg.created_at)) : 'Recién enviado',
-                    read: typeof msg.read === 'boolean' ? msg.read : false
+                    }).format(new Date(msg.created_at)) : 'Recién enviado'
                 })) as PrivateMessage[];
 
                 setMessages(messagesData);
@@ -142,11 +141,8 @@ const Messages: React.FC<MessagesProps> = ({ user }) => {
                 .from('private_messages')
                 .insert({
                     from: user.name,
-                    from_name: user.name,
                     to: activeConversation,
-                    to_name: activeConversation,
-                    content: msgContent,
-                    read: false
+                    content: msgContent
                 });
 
             if (error) throw error;
@@ -160,7 +156,6 @@ const Messages: React.FC<MessagesProps> = ({ user }) => {
         ? (conversations[activeConversation] || []).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
         : [];
 
-    const unreadCount = messages.filter(m => !m.read && m.to === user.name).length;
     const conversationUsers = Object.keys(conversations);
 
     const filteredDirectory = directoryUsers.filter(u =>
@@ -221,7 +216,6 @@ const Messages: React.FC<MessagesProps> = ({ user }) => {
                         <div className="divide-y divide-gray-100">
                             {conversationUsers.map(userName => {
                                 const lastMsg = conversations[userName][0];
-                                const userUnread = messages.filter(m => m.from === userName && !m.read).length;
 
                                 return (
                                     <button
@@ -237,13 +231,10 @@ const Messages: React.FC<MessagesProps> = ({ user }) => {
                                                 <span className="font-bold text-gray-900 text-lg">{userName}</span>
                                                 <span className="text-xs text-gray-400">{lastMsg?.timestamp}</span>
                                             </div>
-                                            <p className={`text-sm truncate ${userUnread > 0 ? 'text-obsidian-900 font-bold' : 'text-gray-500'}`}>
+                                            <p className={`text-sm truncate text-gray-500`}>
                                                 {lastMsg?.from === user.name ? `Tú: ${lastMsg?.content}` : lastMsg?.content}
                                             </p>
                                         </div>
-                                        {userUnread > 0 && (
-                                            <div className="w-3 h-3 bg-pink-500 rounded-full animate-pulse shadow-sm" />
-                                        )}
                                     </button>
                                 );
                             })}
