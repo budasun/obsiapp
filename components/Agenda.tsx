@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { AgendaEvent } from '../types';
-import { Calendar, Bell, Plus, Trash2, Clock, CheckCircle } from 'lucide-react';
+import { Calendar, Bell, Plus, Trash2, Clock, Download } from 'lucide-react';
 
 const MOCK_EVENTS: AgendaEvent[] = [
   {
@@ -14,7 +13,7 @@ const MOCK_EVENTS: AgendaEvent[] = [
   },
   {
     id: '2',
-    title: 'Ginecólogo (Revisión)',
+    title: 'Revisión Ginecológica',
     date: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0],
     time: '10:00',
     type: 'medical',
@@ -46,7 +45,7 @@ const Agenda: React.FC = () => {
       Notification.requestPermission().then(permission => {
         if (permission === "granted") {
           setPermissionGranted(true);
-          new Notification("Obsidiana", { body: "Notificaciones activadas para tus rituales." });
+          new Notification("Obsidiana", { body: "Notificaciones activadas para tu agenda." });
         }
       });
     } else {
@@ -55,28 +54,13 @@ const Agenda: React.FC = () => {
     }
   };
 
-  const generateGoogleUrl = (event: AgendaEvent) => {
-    const base = "https://www.google.com/calendar/render?action=TEMPLATE";
-
-    // Función para formatear a YYYYMMDDTHHMMSSZ (UTC)
-    const formatToGoogleISO = (dateStr: string, timeStr: string, addHours = 0) => {
-      const date = new Date(`${dateStr}T${timeStr}`);
-      if (isNaN(date.getTime())) return '';
-      if (addHours) date.setHours(date.getHours() + addHours);
-      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    };
-
-    const start = formatToGoogleISO(event.date, event.time);
-    const end = formatToGoogleISO(event.date, event.time, 1);
-
-    const title = encodeURIComponent(event.title);
-    const details = encodeURIComponent(`Ritual de Obsidiana - Tipo: ${event.type}\nSincronizado desde tu Agenda Lunar.`);
-    const location = encodeURIComponent("Espacio Sagrado / Hogar");
-
-    return `${base}&text=${title}&dates=${start}/${end}&details=${details}&location=${location}`;
-  };
-
+  // La vía independiente: Exportar archivo universal .ics
   const handleExportICal = () => {
+    if (events.length === 0) {
+      alert("No hay eventos para exportar.");
+      return;
+    }
+
     let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Obsidiana//Agenda Lunar//ES\nCALSCALE:GREGORIAN\n";
 
     events.forEach(event => {
@@ -91,7 +75,7 @@ const Agenda: React.FC = () => {
       icsContent += `SUMMARY:${event.title}\n`;
       icsContent += `DTSTART:${start}\n`;
       icsContent += `DTEND:${end}\n`;
-      icsContent += `DESCRIPTION:Ritual de Obsidiana - Tipo: ${event.type}\n`;
+      icsContent += `DESCRIPTION:Práctica de Obsidiana - Tipo: ${event.type}\n`;
       icsContent += "END:VEVENT\n";
     });
 
@@ -141,24 +125,12 @@ const Agenda: React.FC = () => {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={() => {
-              const nextEvent = events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
-              if (nextEvent) {
-                window.open(generateGoogleUrl(nextEvent), '_blank');
-              } else {
-                alert("Primero crea un evento para sincronizarlo.");
-              }
-            }}
-            title="Añadir el próximo evento a Google Calendar"
-            className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 font-medium px-4 py-2 rounded-xl hover:bg-gray-50 transition-all shadow-sm group"
+            onClick={handleExportICal}
+            title="Descargar agenda para tu calendario (Google/Apple/Outlook)"
+            className="flex items-center space-x-2 bg-white border border-gray-200 text-gray-700 font-medium px-4 py-2 rounded-xl hover:bg-gray-50 transition-all shadow-sm"
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-            </svg>
-            <span>Añadir a Google Calendar</span>
+            <Download size={18} className="text-gray-500" />
+            <span className="hidden sm:inline">Exportar Calendario</span>
           </button>
           <button
             onClick={() => setShowForm(!showForm)}
@@ -187,7 +159,7 @@ const Agenda: React.FC = () => {
         </div>
       )}
 
-      {/* Add Event Form */}
+      {/* Formulario Nuevo Evento */}
       {showForm && (
         <form onSubmit={handleAddEvent} className="bg-white p-6 rounded-2xl shadow-sm border border-obsidian-100 mb-6 animate-fade-in">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -226,7 +198,7 @@ const Agenda: React.FC = () => {
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo de Evento</label>
-              <div className="flex space-x-4">
+              <div className="flex flex-wrap gap-4">
                 {['ritual', 'medical', 'practice', 'other'].map(type => (
                   <label key={type} className="flex items-center space-x-2 cursor-pointer">
                     <input
@@ -237,7 +209,7 @@ const Agenda: React.FC = () => {
                       onChange={() => setNewEvent({ ...newEvent, type: type as any })}
                       className="text-obsidian-600 focus:ring-obsidian-500"
                     />
-                    <span className="capitalize text-sm text-gray-700">{type === 'medical' ? 'Médico' : type === 'practice' ? 'Práctica' : type}</span>
+                    <span className="capitalize text-sm text-gray-700">{type === 'medical' ? 'Médico' : type === 'practice' ? 'Práctica' : type === 'other' ? 'Otro' : type}</span>
                   </label>
                 ))}
               </div>
@@ -250,7 +222,7 @@ const Agenda: React.FC = () => {
         </form>
       )}
 
-      {/* Events List */}
+      {/* Lista de Eventos */}
       <div className="space-y-3">
         {events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(event => (
           <div key={event.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between group hover:border-obsidian-200 transition-all">
@@ -264,27 +236,13 @@ const Agenda: React.FC = () => {
                 <div className="flex items-center space-x-3 text-xs text-gray-500 mt-1">
                   <span className="flex items-center"><Clock size={12} className="mr-1" /> {event.time}</span>
                   <span className={`px-2 py-0.5 rounded-full border ${getTypeColor(event.type)} capitalize`}>
-                    {event.type === 'medical' ? 'Médico' : event.type}
+                    {event.type === 'medical' ? 'Médico' : event.type === 'practice' ? 'Práctica' : event.type === 'other' ? 'Otro' : event.type}
                   </span>
                 </div>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <a
-                href={generateGoogleUrl(event)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Añadir a Google Calendar"
-                className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                  <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                </svg>
-              </a>
-              <button onClick={() => handleDelete(event.id)} className="p-2 text-gray-300 hover:text-red-400 transition-colors">
+            <div className="flex items-center">
+              <button onClick={() => handleDelete(event.id)} className="p-2 text-gray-300 hover:text-red-400 transition-colors" title="Eliminar evento">
                 <Trash2 size={18} />
               </button>
             </div>
