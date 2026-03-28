@@ -19,6 +19,31 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const USER_CACHE_KEY = 'obsidiana_user_profile_cache';
+
+const cacheUserProfile = (profile: UserProfile) => {
+  try {
+    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
+  } catch (e) {
+    console.warn('No se pudo guardar el perfil offline:', e);
+  }
+};
+
+const getCachedUserProfile = (): UserProfile | null => {
+  try {
+    const cached = localStorage.getItem(USER_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+};
+
+const clearCachedUserProfile = () => {
+  try {
+    localStorage.removeItem(USER_CACHE_KEY);
+  } catch { /* ignore */ }
+};
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -46,8 +71,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         if (error) {
           console.error('Error en getSession:', error);
-          setUser(null);
-          setCurrentView(AppView.LOGIN);
+          // Intentar fallback offline
+          const cached = getCachedUserProfile();
+          if (cached && !navigator.onLine) {
+            console.log('📱 Modo offline: usando perfil cacheado');
+            setUser(cached);
+            setCurrentView(AppView.DASHBOARD);
+          } else {
+            setUser(null);
+            setCurrentView(AppView.LOGIN);
+          }
           setIsLoading(false);
           return;
         }
@@ -57,15 +90,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (session?.user) {
           await loadUserProfile(session.user);
         } else {
-          setUser(null);
-          setCurrentView(AppView.LOGIN);
+          // Sin sesión — intentar fallback offline
+          const cached = getCachedUserProfile();
+          if (cached && !navigator.onLine) {
+            console.log('📱 Modo offline: usando perfil cacheado (sin sesión)');
+            setUser(cached);
+            setCurrentView(AppView.DASHBOARD);
+          } else {
+            setUser(null);
+            setCurrentView(AppView.LOGIN);
+          }
           setIsLoading(false);
         }
       } catch (err) {
         console.error('Error en initAuth:', err);
         if (isMounted) {
-          setUser(null);
-          setCurrentView(AppView.LOGIN);
+          // Fallback offline en caso de error de red
+          const cached = getCachedUserProfile();
+          if (cached && !navigator.onLine) {
+            console.log('📱 Modo offline: usando perfil cacheado (error de red)');
+            setUser(cached);
+            setCurrentView(AppView.DASHBOARD);
+          } else {
+            setUser(null);
+            setCurrentView(AppView.LOGIN);
+          }
           setIsLoading(false);
         }
       }
@@ -147,6 +196,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (profileIsComplete) {
           setUser(userData);
           setCurrentView(AppView.DASHBOARD);
+          // Cachear perfil para uso offline
+          cacheUserProfile(userData);
         } else {
           setUser(null);
           setCurrentView(AppView.LOGIN);
@@ -206,6 +257,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       await supabase.auth.signOut();
       setUser(null);
       setCurrentView(AppView.LOGIN);
+      // Limpiar caché offline al cerrar sesión
+      clearCachedUserProfile();
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;
