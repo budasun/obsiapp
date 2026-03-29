@@ -23,7 +23,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     cycleLength: 28,
     email: '',
     password: '',
-    avatarUrl: ''
+    avatarUrl: '',
+    coverUrl: ''
   });
   const { refreshSession } = useApp();
 
@@ -55,6 +56,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
             name: profile.full_name || authUser.user_metadata?.full_name || '',
             email: profile.email || authUser.email || '',
             avatarUrl: profile.avatar_url || authUser.user_metadata?.avatar_url || '',
+            coverUrl: profile.cover_url || '',
             birthDate: profile.birth_date || '',
             lastPeriodDate: profile.last_period_date || '',
             cycleLength: profile.cycle_length || 28,
@@ -67,6 +69,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
           name: authUser.user_metadata?.full_name || '',
           email: authUser.email || '',
           avatarUrl: authUser.user_metadata?.avatar_url || '',
+          coverUrl: '',
         }));
         setStep('profile');
       }
@@ -134,6 +137,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
               cycleLength: profile.cycle_length || 28,
               email: profile.email || data.user.email || '',
               avatarUrl: profile.avatar_url || data.user.user_metadata?.avatar_url || undefined,
+              coverUrl: profile.cover_url || undefined,
               isPremium: profile.is_premium ?? false,
               hasBook: profile.has_book ?? false,
               trialStartTime: profile.trial_start_time ?? undefined,
@@ -208,6 +212,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
       cycleLength: formData.cycleLength,
       email: formData.email || 'user@example.com',
       avatarUrl: formData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'User')}&background=fbcfe8&color=831843`,
+      coverUrl: formData.coverUrl || undefined,
       isPremium: false,
       hasBook: false,
       trialStartTime: undefined
