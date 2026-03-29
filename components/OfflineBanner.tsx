@@ -8,9 +8,9 @@ const OfflineBanner: React.FC = () => {
   if (isOnline) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 z-50 shadow-md animate-slide-down">
+    <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-amber-500/95 backdrop-blur-sm text-white px-5 py-2.5 rounded-full flex items-center justify-center gap-2 z-[100] shadow-xl animate-slide-up text-xs font-bold whitespace-nowrap">
       <WifiOff size={16} />
-      <span className="text-sm font-medium">Sin conexión a internet. Algunos datos podrían no estar actualizados.</span>
+      <span>Modo sin conexión</span>
     </div>
   );
 };
