@@ -251,11 +251,8 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
                 .from('private_messages')
                 .insert({
                     from: user.name,
-                    from_name: user.name,
                     to: dmRecipient,
-                    to_name: dmRecipient,
-                    content: dmMessage.trim(),
-                    read: false
+                    content: dmMessage.trim()
                 });
 
             if (error) throw error;
