@@ -184,6 +184,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           cycleLength: profile.cycle_length || 28,
           email: profile.email || authUser.email || '',
           avatarUrl: profile.avatar_url || authUser.user_metadata?.avatar_url || undefined,
+          coverUrl: profile.cover_url || undefined,
           isPremium: profile.is_premium ?? false,
           hasBook: profile.has_book ?? false,
           trialStartTime: profile.trial_start_time ?? undefined,
