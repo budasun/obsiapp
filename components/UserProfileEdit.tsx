@@ -32,7 +32,8 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) return;
 
-      const filePath = `${authUser.id}/${type}`;
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${authUser.id}/${type}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
         .from('avatars')
@@ -63,8 +64,6 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    onUpdate(formData);
-
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (authUser) {
@@ -83,6 +82,8 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
             updated_at: new Date().toISOString()
           }, { onConflict: 'id' });
       }
+
+      onUpdate(formData);
     } catch (error) {
       console.error("Error guardando perfil en Supabase:", error);
     }
