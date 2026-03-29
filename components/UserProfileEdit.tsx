@@ -11,6 +11,8 @@ interface UserProfileEditProps {
 const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => {
   const [formData, setFormData] = useState<UserProfile>(user);
   const [isSaved, setIsSaved] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -19,19 +21,42 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
     setFormData(user);
   }, [user]);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        if (type === 'avatar') {
-          setFormData({ ...formData, avatarUrl: base64String });
-        } else {
-          setFormData({ ...formData, coverUrl: base64String });
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    if (type === 'avatar') setIsUploadingAvatar(true);
+    else setIsUploadingCover(true);
+
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      const filePath = `${authUser.id}/${type}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const finalUrl = `${publicUrl}?t=${Date.now()}`;
+
+      if (type === 'avatar') {
+        setFormData({ ...formData, avatarUrl: finalUrl });
+      } else {
+        setFormData({ ...formData, coverUrl: finalUrl });
+      }
+    } catch (error) {
+      console.error(`Error subiendo ${type}:`, error);
+      alert(`No se pudo subir la imagen de ${type}. Inténtalo de nuevo.`);
+    } finally {
+      if (type === 'avatar') setIsUploadingAvatar(false);
+      else setIsUploadingCover(false);
     }
   };
 
@@ -49,6 +74,7 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
             id: authUser.id,
             full_name: formData.name,
             avatar_url: formData.avatarUrl || null,
+            cover_url: formData.coverUrl || null,
             birth_date: formData.birthDate,
             last_period_date: formData.lastPeriodDate,
             cycle_length: formData.cycleLength,
@@ -82,7 +108,7 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center text-obsidian-300 opacity-50">
               <Camera size={32} className="mb-2" />
-              <span className="text-xs font-bold uppercase tracking-widest">Añadir Portada</span>
+              <span className="text-xs font-bold uppercase tracking-widest">{isUploadingCover ? 'Subiendo...' : 'Añadir Portada'}</span>
             </div>
           )}
           <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
@@ -95,7 +121,9 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
               onClick={(e) => { e.stopPropagation(); avatarInputRef.current?.click(); }}
             >
               <div className="w-32 h-32 rounded-[2rem] border-[6px] border-white bg-white shadow-2xl flex items-center justify-center overflow-hidden rotate-3 hover:rotate-0 transition-all duration-500">
-                {formData.avatarUrl ? (
+                {isUploadingAvatar ? (
+                  <div className="w-full h-full bg-obsidian-100 flex items-center justify-center text-obsidian-500 font-bold text-xs uppercase tracking-widest text-center px-2">Subiendo...</div>
+                ) : formData.avatarUrl ? (
                   <img src={formData.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-tr from-obsidian-400 to-obsidian-600 flex items-center justify-center text-4xl font-serif text-white">
@@ -192,10 +220,13 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
             </p>
             <button
               type="submit"
-              className="w-full md:w-auto flex items-center justify-center space-x-3 bg-obsidian-900 hover:bg-black text-white px-10 py-4 rounded-2xl transition-all shadow-xl hover:shadow-obsidian-300/50 transform hover:-translate-y-1 active:scale-95 group"
+              disabled={isUploadingAvatar || isUploadingCover}
+              className="w-full md:w-auto flex items-center justify-center space-x-3 bg-obsidian-900 hover:bg-black text-white px-10 py-4 rounded-2xl transition-all shadow-xl hover:shadow-obsidian-300/50 transform hover:-translate-y-1 active:scale-95 group disabled:opacity-50"
             >
               <Save size={20} className="group-hover:rotate-12 transition-transform" />
-              <span className="text-sm font-bold uppercase tracking-widest text-white">Actualizar Energía</span>
+              <span className="text-sm font-bold uppercase tracking-widest text-white">
+                {isUploadingAvatar || isUploadingCover ? 'Subiendo imagen...' : 'Actualizar Energía'}
+              </span>
             </button>
           </div>
         </div>
