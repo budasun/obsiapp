@@ -5,6 +5,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 import OfflineBanner from './components/OfflineBanner';
 import InstallBanner from './components/InstallBanner';
+import IOSInstallPrompt from './components/IOSInstallPrompt';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import BookLibrary from './components/BookLibrary';
@@ -146,6 +147,7 @@ const App: React.FC = () => {
       <AppProvider>
         <OfflineBanner />
         <InstallBanner />
+        <IOSInstallPrompt />
         <AppContent />
       </AppProvider>
     </ErrorBoundary>

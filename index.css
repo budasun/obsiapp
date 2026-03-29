@@ -17,6 +17,18 @@ body {
     -moz-osx-font-smoothing: grayscale;
     background-color: var(--obsidian-bg);
     color: #1f2937;
+    
+    /* Native iOS feel */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    overscroll-behavior-y: none;
+}
+
+input, textarea {
+    -webkit-user-select: auto;
+    user-select: auto;
 }
 
 /* Premium Gradients */
