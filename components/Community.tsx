@@ -50,6 +50,28 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
         return saved ? JSON.parse(saved) : {};
     });
 
+    const [userAvatars, setUserAvatars] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        const loadAvatars = async () => {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('full_name, avatar_url')
+                .eq('profile_complete', true);
+            
+            if (!error && data) {
+                const avatarMap: Record<string, string> = {};
+                data.forEach(p => {
+                    if (p.full_name && p.avatar_url) {
+                        avatarMap[p.full_name] = p.avatar_url;
+                    }
+                });
+                setUserAvatars(avatarMap);
+            }
+        };
+        loadAvatars();
+    }, []);
+
     useEffect(() => {
         const fallbackTimer = setTimeout(() => {
             if (loading) setLoading(false);
@@ -349,7 +371,13 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
                                         onClick={() => post.author !== user.name && setDmRecipient(post.author)}
                                     >
                                         <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-obsidian-400 to-obsidian-600 flex items-center justify-center text-white font-bold text-lg shadow-inner ring-2 ring-white overflow-hidden transition-all ${post.author !== user.name ? 'group-hover:ring-obsidian-200 group-hover:scale-105' : ''}`}>
-                                            {post.author.charAt(0)}
+                                            {post.author === user.name && user.avatarUrl ? (
+                                                <img src={user.avatarUrl} alt={post.author} className="w-full h-full object-cover" />
+                                            ) : userAvatars[post.author] ? (
+                                                <img src={userAvatars[post.author]} alt={post.author} className="w-full h-full object-cover" />
+                                            ) : (
+                                                post.author.charAt(0)
+                                            )}
                                         </div>
                                         <div>
                                             <h4 className={`font-serif font-bold text-gray-900 transition-colors uppercase tracking-tight ${post.author !== user.name ? 'group-hover:text-obsidian-600' : ''}`}>
@@ -406,10 +434,16 @@ const Community: React.FC<CommunityProps> = ({ user }) => {
                                         {post.comments.map(comment => (
                                             <div key={comment.id} className="flex space-x-3">
                                                 <div
-                                                    className={`w-8 h-8 rounded-full bg-white border flex items-center justify-center text-xs font-bold shadow-sm shrink-0 transition-all ${comment.author !== user.name ? 'border-obsidian-200 text-obsidian-600 cursor-pointer hover:bg-obsidian-50 hover:scale-110' : 'border-gray-200 text-obsidian-500'}`}
+                                                    className={`w-8 h-8 rounded-full bg-white border flex items-center justify-center text-xs font-bold shadow-sm shrink-0 transition-all overflow-hidden ${comment.author !== user.name ? 'border-obsidian-200 text-obsidian-600 cursor-pointer hover:bg-obsidian-50 hover:scale-110' : 'border-gray-200 text-obsidian-500'}`}
                                                     onClick={() => comment.author !== user.name && setDmRecipient(comment.author)}
                                                 >
-                                                    {comment.author.charAt(0)}
+                                                    {comment.author === user.name && user.avatarUrl ? (
+                                                        <img src={user.avatarUrl} alt={comment.author} className="w-full h-full object-cover" />
+                                                    ) : userAvatars[comment.author] ? (
+                                                        <img src={userAvatars[comment.author]} alt={comment.author} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        comment.author.charAt(0)
+                                                    )}
                                                 </div>
                                                 <div className="flex-1 bg-white p-4 rounded-2xl rounded-tl-none shadow-sm border border-gray-100">
                                                     <div className="flex justify-between items-center mb-1">
