@@ -4,40 +4,57 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Obsidiana: Sanación Uterina</title>
+
+  <!-- ========== SEO BÁSICO ========== -->
+  <title>Obsidiana | Sanación Uterina, Ciclo Menstrual e IA</title>
   <meta name="description"
-    content="ObsiApp - Tu calendario menstrual con IA integrada. Sanación uterina y seguimiento de ciclo." />
+    content="Obsidiana es tu espacio seguro de salud femenina. Combina calendario menstrual, Inteligencia Artificial, psicosomática y una comunidad de sanación holística.">
+  <meta name="keywords"
+    content="salud femenina, sanación uterina, calendario menstrual, ciclo menstrual, inteligencia artificial, chatbot Osiris, psicosomática, bioenergética, bitácora de sueños, salud holística, endometriosis, SOP, círculo de mujeres">
+  <meta name="author" content="Octavio">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+  <link rel="canonical" href="https://osiris.octaviotrs.com/">
+  <meta http-equiv="content-language" content="es">
 
-  <!-- Open Graph / Facebook / WhatsApp -->
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://osiris.octaviotrs.com/" />
-  <meta property="og:title" content="Obsidiana: Sanación Uterina" />
-  <meta property="og:description" content="Tu calendario menstrual con IA integrada. Sanación uterina y seguimiento de ciclo." />
-  <meta property="og:image" content="https://osiris.octaviotrs.com/osiris_miniatura.png" />
-  <meta property="og:image:type" content="image/png" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
+  <!-- ========== OPEN GRAPH / FACEBOOK / WHATSAPP ========== -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Obsidiana App">
+  <meta property="og:url" content="https://osiris.octaviotrs.com/">
+  <meta property="og:title" content="Obsidiana | Sanación Uterina y Calendario Menstrual con IA">
+  <meta property="og:description"
+    content="Descubre el origen psicosomático de tus síntomas. Rastrea tu ciclo, registra tus sueños y consulta a Osiris, nuestra IA de contención emocional.">
+  <meta property="og:image" content="https://osiris.octaviotrs.com/osiris_miniatura.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Logotipo de Obsidiana con el texto Inteligencia Artificial">
 
-  <!-- Twitter -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:domain" content="osiris.octaviotrs.com" />
-  <meta name="twitter:title" content="Obsidiana: Sanación Uterina" />
-  <meta name="twitter:description" content="Tu calendario menstrual con IA integrada. Sanación uterina y seguimiento de ciclo." />
-  <meta name="twitter:image" content="https://osiris.octaviotrs.com/osiris_miniatura.png" />
+  <!-- ========== TWITTER / X ========== -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://osiris.octaviotrs.com/">
+  <meta name="twitter:title" content="Obsidiana | Sanación Uterina e Inteligencia Artificial">
+  <meta name="twitter:description"
+    content="Tu cuerpo es un vehículo espiritual. Acompaña tu ciclo menstrual con sabiduría holística, biblioteca integrada y el apoyo de la IA Osiris.">
+  <meta name="twitter:image" content="https://osiris.octaviotrs.com/osiris_miniatura.png">
 
-  <!-- PWA: Theme Color (Android Chrome address bar & Windows tile) -->
-  <meta name="theme-color" content="#831843" />
-  <meta name="msapplication-TileColor" content="#831843" />
+  <!-- ========== PWA: WEB APP MANIFEST ========== -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <!-- NOTA: Se eliminó referenciar manifest.json manualmente porque vite-plugin-pwa lo inyecta solo. -->
 
-  <!-- PWA: iOS Meta Tags -->
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Obsidiana" />
+  <!-- ========== PWA iOS / SAFARI ========== -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Obsidiana">
+  <link rel="apple-touch-icon" href="/favicon/apple-touch-icon.png">
 
-  <!-- Favicons (from RealFaviconGenerator, in /favicon/) -->
+  <!-- ========== PWA: THEME COLOR ========== -->
+  <meta name="theme-color" content="#831843">
+  <meta name="msapplication-TileColor" content="#831843">
+
+  <!-- ========== FAVICONS ========== -->
   <link rel="icon" type="image/png" href="/favicon/favicon-96x96.png" sizes="96x96" />
   <link rel="shortcut icon" href="/favicon/favicon.ico" />
-  <link rel="apple-touch-icon" href="/favicon/apple-touch-icon.png" />
+
+  <!-- ========== ESTILOS EXISTENTES (NO MODIFICAR) ========== -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -63,7 +80,7 @@
               950: '#500724',
             },
             stone: {
-              800: '#1c1917', // Obsidian black-ish
+              800: '#1c1917',
             }
           },
           fontFamily: {
@@ -75,7 +92,6 @@
     }
   </script>
   <style>
-    /* Custom scrollbar for webkit */
     ::-webkit-scrollbar {
       width: 8px;
     }
