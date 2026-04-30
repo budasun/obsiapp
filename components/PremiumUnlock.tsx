@@ -26,7 +26,7 @@ const PremiumUnlock: React.FC<{ onUnlock: () => void }> = ({ onUnlock }) => {
     const links: Record<Plan, string> = {
       libro: 'https://buy.stripe.com/8x27sD51McVDawo26w7kc02',
       alquimista: 'https://buy.stripe.com/test_5kQ28j69k2EdaJW0pA9EI01',
-      donacion: 'https://donate.stripe.com/dRm28j0Lw08R4806mM7kc04'
+      donacion: 'https://buy.stripe.com/4gM7sD3XIbRzeMEcLa7kc05'
     };
 
     const checkoutUrl = `${links[plan]}?client_reference_id=${userId}&customer_email=${userEmail}`;

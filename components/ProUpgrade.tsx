@@ -25,7 +25,7 @@ const ProUpgrade: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
     const links: Record<Plan, string> = {
       pro_mensual: 'https://buy.stripe.com/cNi5kv9i22gZeME3aA7kc01',
       pro_anual: 'https://buy.stripe.com/dRm00bdyi5tb33WcLa7kc00',
-      donacion: 'https://donate.stripe.com/dRm28j0Lw08R4806mM7kc04'
+      donacion: 'https://buy.stripe.com/4gM7sD3XIbRzeMEcLa7kc05'
     };
 
     const checkoutUrl = `${links[plan]}?client_reference_id=${userId}&customer_email=${userEmail}`;
