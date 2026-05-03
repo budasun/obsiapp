@@ -50,6 +50,37 @@ export default defineConfig({
         navigateFallback: 'index.html',
         navigateFallbackAllowlist: [/^(?!\/__).*/],
         runtimeCaching: [
+          // TailwindCSS CDN — cache aggressively for offline support
+          {
+            urlPattern: /^https:\/\/cdn\.tailwindcss\.com(\/.*)?$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'tailwindcss-cdn-cache',
+              expiration: {
+                maxEntries: 5,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          // PDF Worker and book files — cache for offline reading
+          {
+            urlPattern: /\/(pdf\.worker\.min\.js|books\/.+\.pdf)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'pdf-assets-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 90, // 90 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+              rangeRequests: true,
+            },
+          },
           // Google Fonts stylesheets
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { analyzeBitacora } from '../services/aiService';
-import { ScrollText, Send, Loader2, Sparkles, MessageCircle, Plus, ChevronLeft, Library } from 'lucide-react';
+import { ScrollText, Send, Loader2, Sparkles, MessageCircle, Plus, ChevronLeft, Library, WifiOff } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import MarkdownRenderer from './MarkdownRenderer';
 
 export interface BitacoraEntry {
@@ -13,6 +14,7 @@ export interface BitacoraEntry {
 }
 
 const Bitacoras: React.FC = () => {
+  const { isOnline } = useApp();
   const [bitacoras, setBitacoras] = useState<BitacoraEntry[]>(() => {
     const saved = localStorage.getItem('obsidiana_bitacoras');
     if (!saved) return [];
@@ -46,7 +48,6 @@ const Bitacoras: React.FC = () => {
   const handleCreateEntry = async () => {
     if (!newEntryText.trim()) return;
 
-    setIsAnalyzing(true);
     const newId = Date.now().toString();
     const newEntry: BitacoraEntry = {
       id: newId,
@@ -61,6 +62,18 @@ const Bitacoras: React.FC = () => {
     setIsCreating(false);
     setNewEntryText('');
 
+    if (!isOnline) {
+      setBitacoras(prev => prev.map(v =>
+        v.id === newId ? {
+          ...v,
+          interpretation: '📝 _Nota guardada offline. El análisis estará disponible cuando recuperes conexión._',
+          chatHistory: [{ id: Date.now().toString(), role: 'model', text: '📝 _Nota guardada offline. El análisis estará disponible cuando recuperes conexión._' }]
+        } : v
+      ));
+      return;
+    }
+
+    setIsAnalyzing(true);
     try {
       const prompt = `Analiza y proporciona contexto expansivo sobre la siguiente nota o investigación: "${newEntry.content}"`;
       const analysis = await analyzeBitacora(prompt);
@@ -79,6 +92,7 @@ const Bitacoras: React.FC = () => {
   };
 
   const handleSendFollowUp = async () => {
+    if (!isOnline) return;
     if (!chatInput.trim() || !activeId) return;
 
     const activeEntry = bitacoras.find(v => v.id === activeId);
@@ -191,6 +205,12 @@ const Bitacoras: React.FC = () => {
                   className="w-full h-40 p-4 bg-transparent border-none outline-none resize-none text-gray-900 placeholder-gray-400 font-serif text-lg leading-relaxed"
                 />
                 <div className="flex justify-end p-2 border-t border-gray-200">
+                  {!isOnline && (
+                    <div className="flex items-center gap-2 text-amber-600 text-xs font-medium mr-auto">
+                      <WifiOff size={14} />
+                      <span>Sin conexión — se guardará localmente</span>
+                    </div>
+                  )}
                   <button
                     onClick={handleCreateEntry}
                     disabled={isAnalyzing || !newEntryText.trim()}
@@ -198,6 +218,8 @@ const Bitacoras: React.FC = () => {
                   >
                     {isAnalyzing ? (
                       <><Loader2 size={18} className="animate-spin" /> <span>Consultando...</span></>
+                    ) : !isOnline ? (
+                      <><WifiOff size={18} /> <span>Guardar Nota (Offline)</span></>
                     ) : (
                       <><Sparkles size={18} /> <span>Investigar</span></>
                     )}
@@ -264,14 +286,16 @@ const Bitacoras: React.FC = () => {
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendFollowUp()}
+                  onKeyPress={(e) => e.key === 'Enter' && isOnline && handleSendFollowUp()}
+                  disabled={!isOnline}
                   placeholder="Pregunta más a fondo sobre el tema..."
                   className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-obsidian-200 text-gray-900 placeholder-gray-500 shadow-inner"
                 />
                 <button
                   onClick={handleSendFollowUp}
-                  disabled={isAnalyzing || !chatInput.trim()}
+                  disabled={isAnalyzing || !chatInput.trim() || !isOnline}
                   className="bg-obsidian-800 hover:bg-black text-white p-3.5 rounded-xl transition-all disabled:opacity-50 shadow-md active:scale-95"
+                  title={!isOnline ? 'Requiere conexión a internet' : ''}
                 >
                   <Send size={20} />
                 </button>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, MiracleQuestion, AppView } from '../types';
 import { MIRACLE_QUESTIONS, PHASE_DETAILS } from '../constants';
 import { getMiracleFeedback } from '../services/aiService'; // Ajusta a tu servicio de IA
-import { Sparkles, Droplet, Calendar, Hourglass, RotateCw, MapPin, Send, Loader2, Wand2, Info, ChevronDown, ChevronUp, Zap, Activity, Moon as MoonIcon, FileText, X, ChevronLeft, PenTool } from 'lucide-react';
+import { Sparkles, Droplet, Calendar, Hourglass, RotateCw, MapPin, Send, Loader2, Wand2, Info, ChevronDown, ChevronUp, Zap, Activity, Moon as MoonIcon, FileText, X, ChevronLeft, PenTool, WifiOff } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { getMoonPhaseData, MoonPhaseVisual } from '../utils/moonUtils';
 import { useApp } from '../context/AppContext';
@@ -366,7 +366,7 @@ const CycleCalendar: React.FC<{ lastPeriod: Date, cycleLength: number, onUpdateP
 
 // DASHBOARD PRINCIPAL
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
-  const { setUser, setCurrentView } = useApp();
+  const { setUser, setCurrentView, isOnline } = useApp();
   const [dailyQuestion, setDailyQuestion] = useState<MiracleQuestion | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -651,11 +651,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     <div className="mt-2 flex justify-end">
                       <button
                         onClick={handleSubmitMiracle}
-                        disabled={isSubmitting || !answer.trim()}
+                        disabled={isSubmitting || !answer.trim() || !isOnline}
                         className="flex items-center gap-2 bg-obsidian-600 hover:bg-obsidian-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50 active:scale-95"
                       >
                         {isSubmitting ? (
                           <><Loader2 size={16} className="animate-spin" /> Conectando...</>
+                        ) : !isOnline ? (
+                          <><WifiOff size={16} /> Requiere conexión</>
                         ) : (
                           <><Send size={16} /> Materializar Intención</>
                         )}

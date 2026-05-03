@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DreamEntry } from '../types';
 import { analyzeDream } from '../services/aiService';
-import { BookHeart, Send, Loader2, Sparkles, MessageCircle, Plus, ChevronLeft, Moon } from 'lucide-react';
+import { BookHeart, Send, Loader2, Sparkles, MessageCircle, Plus, ChevronLeft, Moon, WifiOff } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import MarkdownRenderer from './MarkdownRenderer';
 
 export type ExtendedDreamEntry = DreamEntry & {
@@ -9,6 +10,7 @@ export type ExtendedDreamEntry = DreamEntry & {
 };
 
 const DreamJournal: React.FC = () => {
+  const { isOnline } = useApp();
   const [dreams, setDreams] = useState<ExtendedDreamEntry[]>(() => {
     const saved = localStorage.getItem('obsidiana_dreams');
     if (!saved) return [];
@@ -43,7 +45,6 @@ const DreamJournal: React.FC = () => {
   const handleCreateDream = async () => {
     if (!newDreamText.trim()) return;
 
-    setIsAnalyzing(true);
     const newId = Date.now().toString();
     const newEntry: ExtendedDreamEntry = {
       id: newId,
@@ -55,9 +56,22 @@ const DreamJournal: React.FC = () => {
 
     setDreams(prev => [newEntry, ...prev]);
     setActiveId(newId);
-    setIsCreating(false); // Apagamos modo creación
+    setIsCreating(false);
     setNewDreamText('');
 
+    if (!isOnline) {
+      // Offline: save dream without AI analysis, inform user
+      setDreams(prev => prev.map(d =>
+        d.id === newId ? {
+          ...d,
+          interpretation: '🌙 _Sueño guardado offline. La interpretación de Osiris estará disponible cuando recuperes conexión._',
+          chatHistory: [{ id: Date.now().toString(), role: 'model', text: '🌙 _Sueño guardado offline. La interpretación de Osiris estará disponible cuando recuperes conexión._' }]
+        } : d
+      ));
+      return;
+    }
+
+    setIsAnalyzing(true);
     try {
       const analysis = await analyzeDream(newEntry.content);
       setDreams(prev => prev.map(d =>
@@ -75,6 +89,7 @@ const DreamJournal: React.FC = () => {
   };
 
   const handleSendFollowUp = async () => {
+    if (!isOnline) return;
     if (!chatInput.trim() || !activeId) return;
 
     const activeDream = dreams.find(d => d.id === activeId);
@@ -188,6 +203,12 @@ const DreamJournal: React.FC = () => {
                   className="w-full h-40 p-4 bg-transparent border-none outline-none resize-none text-gray-900 placeholder-gray-400 font-serif text-lg leading-relaxed"
                 />
                 <div className="flex justify-end p-2 border-t border-gray-200">
+                  {!isOnline && (
+                    <div className="flex items-center gap-2 text-amber-600 text-xs font-medium mr-auto">
+                      <WifiOff size={14} />
+                      <span>Sin conexión — se guardará localmente</span>
+                    </div>
+                  )}
                   <button
                     onClick={handleCreateDream}
                     disabled={isAnalyzing || !newDreamText.trim()}
@@ -195,6 +216,8 @@ const DreamJournal: React.FC = () => {
                   >
                     {isAnalyzing ? (
                       <><Loader2 size={18} className="animate-spin" /> <span>Consultando al Oráculo...</span></>
+                    ) : !isOnline ? (
+                      <><WifiOff size={18} /> <span>Guardar Sueño (Offline)</span></>
                     ) : (
                       <><Sparkles size={18} /> <span>Interpretar Sueño</span></>
                     )}
@@ -261,14 +284,16 @@ const DreamJournal: React.FC = () => {
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendFollowUp()}
+                  onKeyPress={(e) => e.key === 'Enter' && isOnline && handleSendFollowUp()}
+                  disabled={!isOnline}
                   placeholder="Profundiza: '¿Qué significa la cueva en este sueño?'..."
                   className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-obsidian-200 text-gray-900 placeholder-gray-500 shadow-inner"
                 />
                 <button
                   onClick={handleSendFollowUp}
-                  disabled={isAnalyzing || !chatInput.trim()}
+                  disabled={isAnalyzing || !chatInput.trim() || !isOnline}
                   className="bg-obsidian-800 hover:bg-black text-white p-3.5 rounded-xl transition-all disabled:opacity-50 shadow-md active:scale-95"
+                  title={!isOnline ? 'Requiere conexión a internet' : ''}
                 >
                   <Send size={20} />
                 </button>

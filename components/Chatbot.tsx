@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../types';
 import { sendMessageToOsiris } from '../services/aiService';
-import { MessageCircleHeart, Send, Loader2, User } from 'lucide-react';
+import { MessageCircleHeart, Send, Loader2, User, WifiOff } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import MarkdownRenderer from './MarkdownRenderer';
 
 const Chatbot: React.FC = () => {
+  const { isOnline } = useApp();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '0',
@@ -64,7 +66,7 @@ const Chatbot: React.FC = () => {
         </div>
         <div>
           <h3 className="font-serif font-bold text-obsidian-900">Consejera Osiris</h3>
-          <p className="text-xs text-obsidian-600">Terapia Arquetípica & Sistémica</p>
+          <p className="text-xs text-obsidian-600">{isOnline ? 'Terapia Arquetípica & Sistémica' : '⚠️ Sin conexión'}</p>
         </div>
       </div>
 
@@ -95,6 +97,12 @@ const Chatbot: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
+      {!isOnline && (
+        <div className="px-4 py-3 bg-amber-50 border-t border-amber-200 flex items-center gap-2 text-amber-700 text-sm font-medium">
+          <WifiOff size={16} />
+          <span>Sin conexión. La Consejera Osiris requiere internet para responder.</span>
+        </div>
+      )}
       {/* Input */}
       <div className="p-4 bg-white border-t border-gray-100">
         <div className="flex items-center space-x-2">
@@ -102,14 +110,16 @@ const Chatbot: React.FC = () => {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Pregunta sobre arquetipos, emociones o el uso del huevo..."
-            className="flex-1 bg-white border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-obsidian-100 text-gray-900 placeholder-gray-500 shadow-sm"
+            onKeyPress={(e) => e.key === 'Enter' && isOnline && handleSend()}
+            disabled={!isOnline}
+            placeholder={isOnline ? "Pregunta sobre arquetipos, emociones o el uso del huevo..." : "Requiere conexión a internet..."}
+            className="flex-1 bg-white border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-obsidian-100 text-gray-900 placeholder-gray-500 shadow-sm disabled:opacity-60 disabled:bg-gray-50"
           />
           <button
             onClick={handleSend}
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || !input.trim() || !isOnline}
             className="bg-obsidian-600 hover:bg-obsidian-700 text-white p-3 rounded-xl transition-colors disabled:opacity-50"
+            title={!isOnline ? 'Requiere conexión a internet' : ''}
           >
             <Send size={20} />
           </button>

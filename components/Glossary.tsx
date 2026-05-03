@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GLOSSARY_DATA } from '../constants';
-import { BookOpen, Search, ExternalLink, Diamond, Globe, Loader2, X } from 'lucide-react';
+import { BookOpen, Search, ExternalLink, Diamond, Globe, Loader2, X, WifiOff } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 
 // Interfaz para unificar qué mostramos en el Modal (sea del libro o de la búsqueda)
 interface ModalData {
@@ -9,6 +10,7 @@ interface ModalData {
 }
 
 const Glossary: React.FC = () => {
+    const { isOnline } = useApp();
     const [searchTerm, setSearchTerm] = useState('');
     const [wikiResults, setWikiResults] = useState<any[]>([]);
     const [isSearchingWiki, setIsSearchingWiki] = useState(false);
@@ -23,7 +25,7 @@ const Glossary: React.FC = () => {
 
     // Integración de búsqueda en Wikipedia
     useEffect(() => {
-        if (searchTerm.length < 3) {
+        if (searchTerm.length < 3 || !isOnline) {
             setWikiResults([]);
             return;
         }
@@ -47,7 +49,7 @@ const Glossary: React.FC = () => {
 
         const timer = setTimeout(searchWiki, 500);
         return () => clearTimeout(timer);
-    }, [searchTerm]);
+    }, [searchTerm, isOnline]);
 
     // Filtrado del glosario local
     const filteredTerms = GLOSSARY_DATA.filter(item => {
