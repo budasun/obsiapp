@@ -188,7 +188,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           isPremium: profile.is_premium ?? false,
           hasBook: profile.has_book ?? false,
           trialStartTime: profile.trial_start_time ?? undefined,
+          premiumExpiresAt: profile.premium_expires_at ?? undefined,
         };
+
+        // Verificar expiración de premium
+        if (userData.isPremium && userData.premiumExpiresAt) {
+          const expiresAt = new Date(userData.premiumExpiresAt);
+          if (expiresAt < new Date()) {
+            console.log('⏰ Premium expirado. Revocando acceso...');
+            userData.isPremium = false;
+            userData.premiumExpiresAt = undefined;
+            // Actualizar en Supabase silenciosamente
+            supabase
+              .from('profiles')
+              .update({ is_premium: false, premium_expires_at: null, stripe_subscription_id: null })
+              .eq('id', authUser.id)
+              .then(({ error }) => {
+                if (error) console.error('Error revocando premium expirado:', error);
+                else console.log('✅ Premium expirado revocado en DB');
+              });
+          }
+        }
 
         if (profile.has_book) {
           setBookUnlocked(true);

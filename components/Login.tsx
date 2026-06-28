@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AppView } from '../types';
-import { Flower, Star, Loader2 } from 'lucide-react';
+import { Flower, Star, Loader2, Mail, KeyRound, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../src/lib/supabaseClient';
 import { validateUserProfile } from '../utils/validation';
 import { useApp } from '../context/AppContext';
@@ -10,12 +10,15 @@ interface LoginProps {
   onNavigate: (view: AppView) => void;
 }
 
-type AuthMode = 'login' | 'register' | 'profile';
+type AuthMode = 'login' | 'register' | 'profile' | 'forgot' | 'reset';
 
 const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
   const [step, setStep] = useState<AuthMode>('login');
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     birthDate: '',
@@ -34,6 +37,18 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
         loadProfileAndCheck(session.user.id, session.user);
       }
     });
+  }, []);
+
+  // Escuchar evento PASSWORD_RECOVERY de Supabase (cuando el usuario hace clic en el enlace del email)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, _session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setStep('reset');
+        setError(null);
+        setSuccessMessage(null);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   const loadProfileAndCheck = async (userId: string, authUser: any) => {
@@ -141,6 +156,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
               isPremium: profile.is_premium ?? false,
               hasBook: profile.has_book ?? false,
               trialStartTime: profile.trial_start_time ?? undefined,
+              premiumExpiresAt: profile.premium_expires_at ?? undefined,
             };
             onLogin(fullUser);
             await refreshSession();
@@ -161,6 +177,89 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
         setError('Este email ya está registrado');
       } else {
         setError(`Error: ${err.message || 'desconocido'}`);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+    setIsLoading(true);
+
+    if (!formData.email) {
+      setError('Ingresa tu correo electrónico para recuperar tu cuenta.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
+        redirectTo: window.location.origin,
+      });
+
+      if (error) throw error;
+
+      setSuccessMessage(
+        '✨ ¡Enlace enviado! Revisa tu bandeja de entrada (y la carpeta de spam) para restablecer tu contraseña.'
+      );
+    } catch (err: any) {
+      console.error('Error en recuperación:', err);
+      if (err.message?.includes('rate limit')) {
+        setError('Demasiados intentos. Espera unos minutos antes de volver a intentar.');
+      } else {
+        setError('No pudimos enviar el correo. Verifica que tu email sea correcto e intenta de nuevo.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+    setIsLoading(true);
+
+    if (!newPassword || !confirmPassword) {
+      setError('Ambos campos de contraseña son obligatorios.');
+      setIsLoading(false);
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.');
+      setIsLoading(false);
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('Las contraseñas no coinciden.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+
+      setSuccessMessage('🔑 ¡Contraseña actualizada exitosamente! Redirigiendo...');
+      setNewPassword('');
+      setConfirmPassword('');
+
+      // Redirigir al login después de 2 segundos
+      setTimeout(() => {
+        setStep('login');
+        setSuccessMessage(null);
+      }, 2500);
+    } catch (err: any) {
+      console.error('Error actualizando contraseña:', err);
+      if (err.message?.includes('same password')) {
+        setError('La nueva contraseña debe ser diferente a la anterior.');
+      } else {
+        setError(`Error: ${err.message || 'No se pudo actualizar la contraseña.'}`);
       }
     } finally {
       setIsLoading(false);
@@ -245,7 +344,128 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
         </div>
 
         <div className="p-8">
-          {step === 'login' || step === 'register' ? (
+          {step === 'forgot' ? (
+            /* ─── RECUPERAR CONTRASEÑA ─── */
+            <div className="space-y-6 animate-fade-in">
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 bg-obsidian-100 rounded-full flex items-center justify-center mb-4">
+                  <Mail className="w-8 h-8 text-obsidian-600" />
+                </div>
+                <h2 className="text-xl font-serif text-obsidian-900 mb-1">Recupera tu Cuenta</h2>
+                <p className="text-sm text-gray-500 leading-relaxed">
+                  Ingresa tu correo electrónico y te enviaremos un enlace mágico para restablecer tu contraseña.
+                </p>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              {successMessage && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
+                  <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <span>{successMessage}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <input
+                  type="email"
+                  placeholder="Tu correo electrónico"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-obsidian-300 focus:border-transparent outline-none text-gray-900 bg-white"
+                  autoFocus
+                />
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-obsidian-600 hover:bg-obsidian-700 text-white font-medium py-3 rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isLoading && <Loader2 className="animate-spin" size={20} />}
+                  <Mail size={18} />
+                  Enviar Enlace de Recuperación
+                </button>
+              </form>
+
+              <div className="text-center">
+                <button
+                  onClick={() => {
+                    setStep('login');
+                    setError(null);
+                    setSuccessMessage(null);
+                  }}
+                  className="text-obsidian-600 hover:text-obsidian-800 text-sm font-medium inline-flex items-center gap-1"
+                >
+                  <ArrowLeft size={14} />
+                  Volver al Inicio de Sesión
+                </button>
+              </div>
+            </div>
+          ) : step === 'reset' ? (
+            /* ─── NUEVA CONTRASEÑA ─── */
+            <div className="space-y-6 animate-fade-in">
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 bg-obsidian-100 rounded-full flex items-center justify-center mb-4">
+                  <KeyRound className="w-8 h-8 text-obsidian-600" />
+                </div>
+                <h2 className="text-xl font-serif text-obsidian-900 mb-1">Nueva Contraseña</h2>
+                <p className="text-sm text-gray-500 leading-relaxed">
+                  Elige una nueva contraseña segura para proteger tu cuenta.
+                </p>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              {successMessage && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
+                  <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <span>{successMessage}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div>
+                  <input
+                    type="password"
+                    placeholder="Nueva contraseña (mín. 6 caracteres)"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-obsidian-300 focus:border-transparent outline-none text-gray-900 bg-white"
+                    autoFocus
+                    minLength={6}
+                  />
+                </div>
+                <div>
+                  <input
+                    type="password"
+                    placeholder="Confirmar nueva contraseña"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-obsidian-300 focus:border-transparent outline-none text-gray-900 bg-white"
+                    minLength={6}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-obsidian-600 hover:bg-obsidian-700 text-white font-medium py-3 rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isLoading && <Loader2 className="animate-spin" size={20} />}
+                  <KeyRound size={18} />
+                  Actualizar Contraseña
+                </button>
+              </form>
+            </div>
+          ) : step === 'login' || step === 'register' ? (
             <div className="space-y-6">
               <p className="text-center text-gray-700 font-sans leading-relaxed">
                 {step === 'login'
@@ -296,11 +516,27 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                 </button>
               </form>
 
+              {step === 'login' && (
+                <div className="text-center">
+                  <button
+                    onClick={() => {
+                      setStep('forgot');
+                      setError(null);
+                      setSuccessMessage(null);
+                    }}
+                    className="text-gray-500 hover:text-obsidian-600 text-xs font-medium transition-colors"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+              )}
+
               <div className="text-center">
                 <button
                   onClick={() => {
                     setStep(step === 'login' ? 'register' : 'login');
                     setError(null);
+                    setSuccessMessage(null);
                   }}
                   className="text-obsidian-600 hover:text-obsidian-800 text-sm font-medium"
                 >

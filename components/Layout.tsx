@@ -17,7 +17,8 @@ import {
   Library,
   ScrollText,
   Crown,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../src/lib/supabaseClient';
@@ -37,6 +38,15 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, us
   const { isOnline, session } = useApp();
 
   const PRO_VIEWS = [AppView.DREAMS, AppView.BITACORAS, AppView.CHATBOT, AppView.COMMUNITY];
+
+  // Calcular días restantes de premium
+  const premiumDaysLeft = (() => {
+    if (!user?.isPremium || !user?.premiumExpiresAt) return null;
+    const expiresAt = new Date(user.premiumExpiresAt);
+    const now = new Date();
+    const diffMs = expiresAt.getTime() - now.getTime();
+    return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+  })();
 
   const handleStartTrial = async () => {
     if (!user) return;
@@ -129,20 +139,43 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, us
   const Navigation = () => (
     <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
       <div className="pb-4 mb-4 border-b border-obsidian-100">
-        <button
-          onClick={() => {
-            onChangeView(AppView.PRO_UPGRADE);
-            setIsMobileMenuOpen(false);
-          }}
-          className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-            currentView === AppView.PRO_UPGRADE
-              ? 'bg-gradient-to-r from-amber-400 to-[#D4AF37] text-obsidian-900 shadow-md'
-              : 'text-amber-600 hover:bg-amber-50 hover:text-amber-700'
-          }`}
-        >
-          <Crown size={20} className={currentView === AppView.PRO_UPGRADE ? 'text-obsidian-900' : 'text-amber-500'} />
-          <span className="font-sans font-bold">Subir a PRO</span>
-        </button>
+        {user?.isPremium ? (
+          <div className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-amber-50 to-green-50 border border-amber-200">
+            <div className="flex items-center gap-2 mb-1">
+              <Crown size={16} className="text-amber-500" />
+              <span className="font-bold text-sm text-obsidian-900">PRO Activo</span>
+            </div>
+            {premiumDaysLeft !== null && (
+              <div className={`flex items-center gap-1.5 text-xs font-medium ${
+                premiumDaysLeft <= 3 ? 'text-red-600' : premiumDaysLeft <= 7 ? 'text-amber-600' : 'text-green-600'
+              }`}>
+                <Clock size={12} />
+                <span>
+                  {premiumDaysLeft === 0 
+                    ? 'Expira hoy' 
+                    : premiumDaysLeft === 1 
+                      ? 'Expira mañana' 
+                      : `${premiumDaysLeft} días restantes`}
+                </span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={() => {
+              onChangeView(AppView.PRO_UPGRADE);
+              setIsMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+              currentView === AppView.PRO_UPGRADE
+                ? 'bg-gradient-to-r from-amber-400 to-[#D4AF37] text-obsidian-900 shadow-md'
+                : 'text-amber-600 hover:bg-amber-50 hover:text-amber-700'
+            }`}
+          >
+            <Crown size={20} className={currentView === AppView.PRO_UPGRADE ? 'text-obsidian-900' : 'text-amber-500'} />
+            <span className="font-sans font-bold">Subir a PRO</span>
+          </button>
+        )}
       </div>
       
       <NavItem view={AppView.DASHBOARD} icon={Moon} label="Mi Ciclo Lunar" />

@@ -9,6 +9,7 @@ export interface UserProfile {
   isPremium?: boolean;
   hasBook?: boolean;
   trialStartTime?: number;
+  premiumExpiresAt?: string; // ISO timestamp de expiración premium
 }
 
 
