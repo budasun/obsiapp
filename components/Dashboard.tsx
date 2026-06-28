@@ -6,6 +6,7 @@ import { Sparkles, Droplet, Calendar, Hourglass, RotateCw, MapPin, Send, Loader2
 import MarkdownRenderer from './MarkdownRenderer';
 import { getMoonPhaseData, MoonPhaseVisual } from '../utils/moonUtils';
 import { useApp } from '../context/AppContext';
+import { supabase } from '../src/lib/supabaseClient';
 
 interface DashboardProps {
   user: UserProfile;
@@ -389,12 +390,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     setCurrentDate(new Date());
   };
 
-  const handleUpdatePeriodStart = (newDate: Date) => {
+  const handleUpdatePeriodStart = async (newDate: Date) => {
     if (window.confirm(`¿Estás segura de registrar el ${newDate.toLocaleDateString()} como el inicio de tu ciclo menstrual?`)) {
       const offset = newDate.getTimezoneOffset();
       const localDate = new Date(newDate.getTime() - (offset * 60 * 1000));
       const formattedDateLocal = localDate.toISOString().split('T')[0];
       setUser({ ...user, lastPeriodDate: formattedDateLocal });
+
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          await supabase
+            .from('profiles')
+            .update({ last_period_date: formattedDateLocal })
+            .eq('id', authUser.id);
+        }
+      } catch (error) {
+        console.error('Error actualizando fecha de periodo:', error);
+      }
     }
   };
 
