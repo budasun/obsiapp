@@ -15,6 +15,8 @@ interface AppContextType {
   bookUnlocked: boolean;
   setBookUnlocked: (unlocked: boolean) => void;
   handleLogout: () => Promise<void>;
+  pendingPasswordReset: boolean;
+  setPendingPasswordReset: (pending: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -50,6 +52,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [currentView, setCurrentView] = useState<AppView>(AppView.LOGIN);
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingPasswordReset, setPendingPasswordReset] = useState(false);
   const [bookUnlocked, setBookUnlocked] = useState<boolean>(() => {
     try {
       return localStorage.getItem('obsidiana_book_unlocked') === 'true';
@@ -128,6 +131,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         setSession(session);
         
+        // Interceptar PASSWORD_RECOVERY ANTES de que SIGNED_IN redirija al dashboard
+        if (event === 'PASSWORD_RECOVERY') {
+          console.log('🔑 Evento PASSWORD_RECOVERY detectado, activando formulario de reset');
+          setPendingPasswordReset(true);
+          setCurrentView(AppView.LOGIN);
+          setIsLoading(false);
+          return; // No cargar perfil ni redirigir
+        }
+
         if (event === 'SIGNED_IN' && session?.user) {
           await loadUserProfile(session.user);
         } else if (event === 'SIGNED_OUT') {
@@ -312,6 +324,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         bookUnlocked,
         setBookUnlocked,
         handleLogout,
+        pendingPasswordReset,
+        setPendingPasswordReset,
       }}
     >
       {children}

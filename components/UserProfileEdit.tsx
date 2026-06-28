@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile } from '../types';
-import { Save, User, Calendar, Droplet, Camera, ShieldCheck } from 'lucide-react';
+import { Save, User, Calendar, Droplet, Camera, ShieldCheck, KeyRound, Loader2, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../src/lib/supabaseClient';
 
 interface UserProfileEditProps {
@@ -13,6 +13,17 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
   const [isSaved, setIsSaved] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
+
+  // Estado para cambio de contraseña
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +101,55 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
 
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (!passwordData.newPassword || !passwordData.confirmPassword) {
+      setPasswordError('Ambos campos son obligatorios.');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      setPasswordError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    setIsChangingPassword(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: passwordData.newPassword,
+      });
+
+      if (error) throw error;
+
+      setPasswordSuccess('🔐 ¡Contraseña actualizada exitosamente!');
+      setPasswordData({ newPassword: '', confirmPassword: '' });
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
+
+      setTimeout(() => setPasswordSuccess(null), 5000);
+    } catch (err: any) {
+      console.error('Error cambiando contraseña:', err);
+      if (err.message?.includes('same password')) {
+        setPasswordError('La nueva contraseña debe ser diferente a la actual.');
+      } else if (err.message?.includes('should be different')) {
+        setPasswordError('La nueva contraseña debe ser diferente a la actual.');
+      } else {
+        setPasswordError(`Error: ${err.message || 'No se pudo cambiar la contraseña.'}`);
+      }
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   return (
@@ -232,6 +292,101 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
           </div>
         </div>
       </form>
+
+      {/* ─── SECCIÓN CAMBIO DE CONTRASEÑA ─── */}
+      <div className="bg-white rounded-[2.5rem] shadow-xl border border-obsidian-50 overflow-hidden transition-all duration-500 hover:shadow-2xl">
+        <div className="p-8 md:p-10">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 bg-obsidian-100 rounded-2xl">
+              <KeyRound className="w-6 h-6 text-obsidian-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-serif font-bold text-obsidian-900">Cambiar Contraseña</h3>
+              <p className="text-xs text-gray-400 font-medium">Protege tu cuenta con una nueva contraseña segura</p>
+            </div>
+          </div>
+
+          {passwordError && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm mb-4">
+              {passwordError}
+            </div>
+          )}
+
+          {passwordSuccess && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-sm mb-4 flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+              <span>{passwordSuccess}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleChangePassword} className="space-y-5">
+            <div>
+              <label className="block text-[10px] font-bold text-obsidian-400 uppercase tracking-[0.2em] mb-3">
+                Nueva Contraseña
+              </label>
+              <div className="relative">
+                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-obsidian-300" size={18} />
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                  placeholder="Mín. 6 caracteres"
+                  className="w-full pl-12 pr-12 py-4 bg-obsidian-50/50 border border-obsidian-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-obsidian-100 focus:border-obsidian-300 outline-none text-gray-900 transition-all font-sans"
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-obsidian-300 hover:text-obsidian-600 transition-colors"
+                >
+                  {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-obsidian-400 uppercase tracking-[0.2em] mb-3">
+                Confirmar Contraseña
+              </label>
+              <div className="relative">
+                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-obsidian-300" size={18} />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                  placeholder="Repite la nueva contraseña"
+                  className="w-full pl-12 pr-12 py-4 bg-obsidian-50/50 border border-obsidian-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-obsidian-100 focus:border-obsidian-300 outline-none text-gray-900 transition-all font-sans"
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-obsidian-300 hover:text-obsidian-600 transition-colors"
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-4">
+              <button
+                type="submit"
+                disabled={isChangingPassword}
+                className="w-full md:w-auto flex items-center justify-center space-x-3 bg-obsidian-600 hover:bg-obsidian-700 text-white px-8 py-4 rounded-2xl transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:scale-95 group disabled:opacity-50"
+              >
+                {isChangingPassword ? (
+                  <Loader2 size={20} className="animate-spin" />
+                ) : (
+                  <KeyRound size={20} className="group-hover:rotate-12 transition-transform" />
+                )}
+                <span className="text-sm font-bold uppercase tracking-widest">
+                  {isChangingPassword ? 'Actualizando...' : 'Cambiar Contraseña'}
+                </span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   );
 };

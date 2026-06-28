@@ -29,7 +29,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     avatarUrl: '',
     coverUrl: ''
   });
-  const { refreshSession } = useApp();
+  const { refreshSession, pendingPasswordReset, setPendingPasswordReset } = useApp();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -39,17 +39,14 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     });
   }, []);
 
-  // Escuchar evento PASSWORD_RECOVERY de Supabase (cuando el usuario hace clic en el enlace del email)
+  // Escuchar estado de PASSWORD_RECOVERY desde AppContext
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, _session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setStep('reset');
-        setError(null);
-        setSuccessMessage(null);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+    if (pendingPasswordReset) {
+      setStep('reset');
+      setError(null);
+      setSuccessMessage(null);
+    }
+  }, [pendingPasswordReset]);
 
   const loadProfileAndCheck = async (userId: string, authUser: any) => {
     try {
@@ -249,10 +246,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
       setNewPassword('');
       setConfirmPassword('');
 
-      // Redirigir al login después de 2 segundos
-      setTimeout(() => {
+      // Limpiar el flag de reset y redirigir al dashboard
+      setTimeout(async () => {
+        setPendingPasswordReset(false);
         setStep('login');
         setSuccessMessage(null);
+        // Re-cargar el perfil del usuario para redirección apropiada
+        await refreshSession();
       }, 2500);
     } catch (err: any) {
       console.error('Error actualizando contraseña:', err);

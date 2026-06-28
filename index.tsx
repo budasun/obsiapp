@@ -30,18 +30,26 @@ const PageLoader: React.FC = () => (
 );
 
 const AppContent: React.FC = () => {
-  const { user, setUser, currentView, setCurrentView, isLoading, isOnline, handleLogout, bookUnlocked, setBookUnlocked } = useApp();
+  const { user, setUser, currentView, setCurrentView, isLoading, isOnline, handleLogout, bookUnlocked, setBookUnlocked, pendingPasswordReset } = useApp();
 
   useEffect(() => {
+    // No redirigir al dashboard si hay un reset de contraseña pendiente
+    if (pendingPasswordReset) return;
+    
     if (user && currentView === AppView.LOGIN) {
       setCurrentView(AppView.DASHBOARD);
     } else if (!user && currentView !== AppView.LOGIN) {
       setCurrentView(AppView.LOGIN);
     }
-  }, [user, currentView, setCurrentView]);
+  }, [user, currentView, setCurrentView, pendingPasswordReset]);
 
   if (isLoading) {
     return <LoadingSpinner fullScreen text="Inicializando Obsidiana..." />;
+  }
+
+  // Si hay un password reset pendiente, mostrar Login con el formulario de reset
+  if (pendingPasswordReset) {
+    return <Login onLogin={setUser} onNavigate={setCurrentView} />;
   }
 
   const renderContent = () => {
