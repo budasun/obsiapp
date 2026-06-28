@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AppView } from '../types';
-import { Flower, Star, Loader2, Mail, KeyRound, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Flower, Star, Loader2, Mail, KeyRound, ArrowLeft, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../src/lib/supabaseClient';
 import { validateUserProfile } from '../utils/validation';
 import { useApp } from '../context/AppContext';
@@ -17,6 +17,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [formData, setFormData] = useState({
@@ -111,7 +112,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     try {
       if (step === 'register') {
         const { data, error: signUpError } = await supabase.auth.signUp({
-          email: formData.email,
+          email: formData.email.trim(),
           password: formData.password,
           options: {
             data: {
@@ -128,7 +129,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
         }
       } else {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email: formData.email,
+          email: formData.email.trim(),
           password: formData.password,
         });
 
@@ -193,7 +194,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
     }
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(formData.email.trim(), {
         redirectTo: window.location.origin,
       });
 
@@ -378,6 +379,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-obsidian-300 focus:border-transparent outline-none text-gray-900 bg-white"
                   autoFocus
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  autoCorrect="off"
                 />
 
                 <button
@@ -488,6 +492,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-obsidian-300 focus:border-transparent outline-none text-gray-900 bg-white"
+                      autoComplete="name"
                     />
                   </div>
                 )}
@@ -497,14 +502,29 @@ const Login: React.FC<LoginProps> = ({ onLogin, onNavigate }) => {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-obsidian-300 focus:border-transparent outline-none text-gray-900 bg-white"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  autoCorrect="off"
                 />
-                <input
-                  type="password"
-                  placeholder="Contraseña"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-obsidian-300 focus:border-transparent outline-none text-gray-900 bg-white"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Contraseña"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full pl-4 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-obsidian-300 focus:border-transparent outline-none text-gray-900 bg-white"
+                    autoComplete="current-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-obsidian-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
 
                 <button
                   type="submit"

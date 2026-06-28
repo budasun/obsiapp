@@ -333,6 +333,8 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
                   placeholder="Mín. 6 caracteres"
                   className="w-full pl-12 pr-12 py-4 bg-obsidian-50/50 border border-obsidian-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-obsidian-100 focus:border-obsidian-300 outline-none text-gray-900 transition-all font-sans"
                   minLength={6}
+                  autoCapitalize="none"
+                  autoCorrect="off"
                 />
                 <button
                   type="button"
@@ -357,6 +359,8 @@ const UserProfileEdit: React.FC<UserProfileEditProps> = ({ user, onUpdate }) => 
                   placeholder="Repite la nueva contraseña"
                   className="w-full pl-12 pr-12 py-4 bg-obsidian-50/50 border border-obsidian-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-obsidian-100 focus:border-obsidian-300 outline-none text-gray-900 transition-all font-sans"
                   minLength={6}
+                  autoCapitalize="none"
+                  autoCorrect="off"
                 />
                 <button
                   type="button"
