@@ -5,8 +5,10 @@ import { supabase } from '../src/lib/supabaseClient';
 // @ts-ignore - pdfjs-dist legacy para mejor compatibilidad
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
 
-// Usar worker local (con versión para romper caché obsoleta del service worker PWA)
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js?v=5.5.207';
+// Usar worker local generado desde node_modules (siempre coincide con la versión instalada).
+// El query ?v= evita que el service worker PWA sirva un worker obsoleto en caché.
+import pdfWorkerVersion from '../src/pdf-worker-version.json';
+pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js?v=${pdfWorkerVersion.version}`;
 
 const STORAGE_KEY = 'obsidiana_book_progress';
 const BITACORAS_KEY = 'obsidiana_bitacoras';
