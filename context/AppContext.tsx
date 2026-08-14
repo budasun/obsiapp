@@ -78,8 +78,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const cached = getCachedUserProfile();
           if (cached && !navigator.onLine) {
             console.log('📱 Modo offline: usando perfil cacheado');
-            setUser(cached);
-            setCurrentView(AppView.DASHBOARD);
+             setUser(cached);
+             setBookUnlocked(!!cached.hasBook);
+             setCurrentView(AppView.DASHBOARD);
           } else {
             setUser(null);
             setCurrentView(AppView.LOGIN);
@@ -97,8 +98,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const cached = getCachedUserProfile();
           if (cached && !navigator.onLine) {
             console.log('📱 Modo offline: usando perfil cacheado (sin sesión)');
-            setUser(cached);
-            setCurrentView(AppView.DASHBOARD);
+             setUser(cached);
+             setBookUnlocked(!!cached.hasBook);
+             setCurrentView(AppView.DASHBOARD);
           } else {
             setUser(null);
             setCurrentView(AppView.LOGIN);
@@ -112,8 +114,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const cached = getCachedUserProfile();
           if (cached && !navigator.onLine) {
             console.log('📱 Modo offline: usando perfil cacheado (error de red)');
-            setUser(cached);
-            setCurrentView(AppView.DASHBOARD);
+             setUser(cached);
+             setBookUnlocked(!!cached.hasBook);
+             setCurrentView(AppView.DASHBOARD);
           } else {
             setUser(null);
             setCurrentView(AppView.LOGIN);
@@ -144,6 +147,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           await loadUserProfile(session.user);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
+          setBookUnlocked(false);
           setCurrentView(AppView.LOGIN);
           setIsLoading(false);
         } else if (event === 'TOKEN_REFRESHED' && session?.user) {
@@ -222,9 +226,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }
         }
 
-        if (profile.has_book) {
-          setBookUnlocked(true);
-        }
+        // El acceso al libro debe reflejar SIEMPRE el has_book del usuario actual,
+        // no un flag global pegajoso en localStorage (evita que usuarios nuevos
+        // vean el libro desbloqueado por una sesión anterior).
+        setBookUnlocked(!!profile.has_book);
 
         if (profileIsComplete) {
           setUser(userData);
