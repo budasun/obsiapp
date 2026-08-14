@@ -67,7 +67,7 @@ export default defineConfig({
           },
           // PDF Worker and book files — cache for offline reading
           {
-            urlPattern: /\/(pdf\.worker\.min\.js|books\/.+\.pdf)$/i,
+            urlPattern: /\/(pdf\.worker\.min\.js|books\/.+\.pdf)/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'pdf-assets-cache',

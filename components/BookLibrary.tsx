@@ -5,8 +5,8 @@ import { supabase } from '../src/lib/supabaseClient';
 // @ts-ignore - pdfjs-dist legacy para mejor compatibilidad
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
 
-// Usar worker local
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+// Usar worker local (con versión para romper caché obsoleta del service worker PWA)
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js?v=5.5.207';
 
 const STORAGE_KEY = 'obsidiana_book_progress';
 const BITACORAS_KEY = 'obsidiana_bitacoras';
@@ -162,7 +162,8 @@ const PDFViewer: React.FC<{
       } catch (err: any) {
         if (!cancelled) {
           console.error("Error en PDFViewer:", err);
-          setError("No se pudo encontrar el libro. Verifica que el archivo esté en public/books/libro.pdf");
+          const detail = err?.message ? ` (${err.message})` : '';
+          setError(`No se pudo cargar el libro${detail}. Verifica tu conexión y que el archivo esté en public/books/libro.pdf`);
           setIsLoading(false);
         }
       }
