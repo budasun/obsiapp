@@ -130,6 +130,13 @@ serve(async (req) => {
 
       let productsActivated: string[] = [];
 
+      // Detectar si es un pago gratuito (cupón 100% de descuento)
+      const isFree = session.amount_total === 0 || session.payment_status === "no_payment_required";
+
+      if (isFree) {
+        console.log("🎁 Pago gratuito detectado (cupón 100%)");
+      }
+
       if (session.line_items?.data) {
         for (const item of session.line_items.data) {
           const productId = (item.price?.product as Stripe.Product)?.id;
@@ -172,6 +179,65 @@ serve(async (req) => {
         expiresAt.setDate(expiresAt.getDate() + 30);
         updateData.premium_expires_at = expiresAt.toISOString();
         productsActivated.push("Membresía (Metadata)");
+      }
+
+      // Si es un pago gratuito (cupón 100%) y no se activó ningún producto,
+      // intentar detectar el producto por la metadata del checkout o por el precio
+      if (isFree && productsActivated.length === 0) {
+        console.log("🔍 Cupón 100% sin producto detectado, verificando...");
+        
+        // Método 1: Verificar si hay metadata que indique el tipo de producto
+        if (session.metadata?.product_type === "book") {
+          updateData.has_book = true;
+          productsActivated.push("Libro (Cupón 100%)");
+          console.log("🎁 Activando Libro por cupón 100% (metadata)");
+        } else if (session.metadata?.product_type === "premium") {
+          updateData.is_premium = true;
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 30);
+          updateData.premium_expires_at = expiresAt.toISOString();
+          productsActivated.push("Premium (Cupón 100%)");
+          console.log("🎁 Activando Premium por cupón 100% (metadata)");
+        } 
+        // Método 2: Si no hay metadata, intentar por el precio unitario
+        else if (session.line_items?.data?.[0]?.price?.unit_amount !== undefined) {
+          const unitAmount = session.line_items.data[0].price.unit_amount;
+          
+          // Precio del libro: $5.99 = 599 centavos
+          if (unitAmount === 599) {
+            updateData.has_book = true;
+            productsActivated.push("Libro (Cupón 100%)");
+            console.log("🎁 Activando Libro por cupón 100% (precio: $5.99)");
+          }
+          // Precio premium mensual: $9.99 = 999 centavos
+          else if (unitAmount === 999) {
+            updateData.is_premium = true;
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 30);
+            updateData.premium_expires_at = expiresAt.toISOString();
+            productsActivated.push("Premium Mensual (Cupón 100%)");
+            console.log("🎁 Activando Premium Mensual por cupón 100% (precio: $9.99)");
+          }
+          // Precio premium anual: $99 = 9900 centavos
+          else if (unitAmount === 9900) {
+            updateData.is_premium = true;
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 365);
+            updateData.premium_expires_at = expiresAt.toISOString();
+            productsActivated.push("Premium Anual (Cupón 100%)");
+            console.log("🎁 Activando Premium Anual por cupón 100% (precio: $99)");
+          }
+          else {
+            console.log(`⚠️ Precio no reconocido para cupón 100%: ${unitAmount} centavos`);
+          }
+        }
+        // Método 3: Si no hay línea de items, activar libro por defecto (es el producto más común)
+        else {
+          console.log("🔍 Sin información de producto, activando Libro por defecto...");
+          updateData.has_book = true;
+          productsActivated.push("Libro (Cupón 100% - Default)");
+          console.log("🎁 Activando Libro por cupón 100% (default)");
+        }
       }
 
       if (productsActivated.length === 0) {
