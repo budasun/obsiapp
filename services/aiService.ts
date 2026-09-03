@@ -1,4 +1,6 @@
-// Archivo: src/services/geminiService.ts (o groqService.ts)
+// Servicio de IA con Sistema de Fallback
+// Modelo Principal: OpenAI GPT-OSS 120B (Mayor calidad)
+// Modelo Secundario: Qwen 3.6 27B (Fallback si falla el principal)
 
 import { CHATBOT_SYSTEM_INSTRUCTION, DREAM_ANALYSIS_SYSTEM_INSTRUCTION, MIRACLE_FEEDBACK_SYSTEM_INSTRUCTION, BITACORA_SYSTEM_INSTRUCTION } from "../constants";
 import Groq from "groq-sdk";
@@ -7,8 +9,12 @@ const getApiKey = () => {
   return import.meta.env.VITE_GROQ_API_KEY;
 };
 
-const getModel = () => {
-  return import.meta.env.VITE_GROQ_MODEL || "llama-3.3-70b-versatile";
+const getPrimaryModel = () => {
+  return import.meta.env.VITE_AI_MODEL_PRIMARY || "openai/gpt-oss-120b";
+};
+
+const getSecondaryModel = () => {
+  return import.meta.env.VITE_AI_MODEL_SECONDARY || "qwen/qwen3.6-27b";
 };
 
 let groqClient: Groq | null = null;
@@ -21,7 +27,7 @@ const getGroqClient = () => {
   if (!groqClient) {
     groqClient = new Groq({
       apiKey: apiKey,
-      dangerouslyAllowBrowser: true // <- ESTA ES LA MAGIA QUE FALTABA
+      dangerouslyAllowBrowser: true
     });
   }
   return groqClient;
@@ -49,31 +55,55 @@ const getRandomDemoResponse = (type: 'osiris' | 'dream' | 'miracle'): string => 
   return DEMO_RESPONSES[type];
 };
 
-const callGroq = async (systemInstruction: string, userPrompt: string): Promise<string> => {
-  if (!isConfigured()) {
-    throw new Error("API_NO_CONFIGURADA");
-  }
-
+// Función para llamar a un modelo específico
+const callModel = async (model: string, systemInstruction: string, userPrompt: string, maxTokens: number = 2048): Promise<string> => {
   const client = getGroqClient();
   if (!client) {
     throw new Error("Cliente Groq no inicializado");
   }
 
-  try {
-    const chatCompletion = await client.chat.completions.create({
-      model: getModel(),
-      messages: [
-        { role: "system", content: systemInstruction },
-        { role: "user", content: userPrompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 2048, // Aumenté un poco los tokens para que las respuestas de Sombra y Milagros no se corten
-    });
+  const chatCompletion = await client.chat.completions.create({
+    model: model,
+    messages: [
+      { role: "system", content: systemInstruction },
+      { role: "user", content: userPrompt }
+    ],
+    temperature: 0.7,
+    max_tokens: maxTokens,
+  });
 
-    return chatCompletion.choices[0]?.message?.content || "";
-  } catch (error: any) {
-    console.error("Groq Error:", error);
-    throw new Error(error.message || "Error al conectar con Groq");
+  return chatCompletion.choices[0]?.message?.content || "";
+};
+
+// Función principal con fallback automático
+const callGroq = async (systemInstruction: string, userPrompt: string, maxTokens: number = 2048): Promise<string> => {
+  if (!isConfigured()) {
+    throw new Error("API_NO_CONFIGURADA");
+  }
+
+  const primaryModel = getPrimaryModel();
+  const secondaryModel = getSecondaryModel();
+
+  console.log(`🤖 Intentando con modelo principal: ${primaryModel}`);
+
+  try {
+    // Intentar con el modelo principal
+    const response = await callModel(primaryModel, systemInstruction, userPrompt, maxTokens);
+    console.log(`✅ Modelo principal respondió correctamente`);
+    return response;
+  } catch (primaryError: any) {
+    console.warn(`⚠️ Modelo principal (${primaryModel}) falló:`, primaryError.message);
+    console.log(`🔄 Intentando con modelo secundario: ${secondaryModel}`);
+
+    try {
+      // Si falla el principal, intentar con el secundario
+      const response = await callModel(secondaryModel, systemInstruction, userPrompt, maxTokens);
+      console.log(`✅ Modelo secundario respondió correctamente`);
+      return response;
+    } catch (secondaryError: any) {
+      console.error(`❌ Modelo secundario (${secondaryModel}) también falló:`, secondaryError.message);
+      throw new Error(`Ambos modelos fallaron. Principal: ${primaryError.message}, Secundario: ${secondaryError.message}`);
+    }
   }
 };
 
@@ -128,6 +158,9 @@ export const sendMessageToOsiris = async (userMessage: string): Promise<string> 
   const client = getGroqClient();
   if (!client) return getRandomDemoResponse('osiris');
 
+  const primaryModel = getPrimaryModel();
+  const secondaryModel = getSecondaryModel();
+
   try {
     // Si el historial está vacío, metemos la instrucción del sistema
     if (chatHistory.length === 0) {
@@ -139,18 +172,42 @@ export const sendMessageToOsiris = async (userMessage: string): Promise<string> 
 
     // Para no exceder límites, mantenemos solo los últimos 6 mensajes (3 interacciones)
     if (chatHistory.length > 7) {
-      // Mantenemos el primer mensaje (system) y borramos los viejos
       chatHistory = [chatHistory[0], ...chatHistory.slice(chatHistory.length - 6)];
     }
 
-    const chatCompletion = await client.chat.completions.create({
-      model: getModel(),
-      messages: chatHistory as any, // TypeScript a veces se queja de los tipos estrictos aquí
-      temperature: 0.7,
-      max_tokens: 1024,
-    });
+    console.log(`🤖 Chat Osiris - Intentando con modelo principal: ${primaryModel}`);
 
-    const botResponse = chatCompletion.choices[0]?.message?.content || "";
+    let botResponse = "";
+
+    try {
+      // Intentar con el modelo principal
+      const chatCompletion = await client.chat.completions.create({
+        model: primaryModel,
+        messages: chatHistory as any,
+        temperature: 0.7,
+        max_tokens: 1024,
+      });
+      botResponse = chatCompletion.choices[0]?.message?.content || "";
+      console.log(`✅ Modelo principal respondió correctamente`);
+    } catch (primaryError: any) {
+      console.warn(`⚠️ Modelo principal (${primaryModel}) falló:`, primaryError.message);
+      console.log(`🔄 Intentando con modelo secundario: ${secondaryModel}`);
+
+      try {
+        // Si falla el principal, intentar con el secundario
+        const chatCompletion = await client.chat.completions.create({
+          model: secondaryModel,
+          messages: chatHistory as any,
+          temperature: 0.7,
+          max_tokens: 1024,
+        });
+        botResponse = chatCompletion.choices[0]?.message?.content || "";
+        console.log(`✅ Modelo secundario respondió correctamente`);
+      } catch (secondaryError: any) {
+        console.error(`❌ Modelo secundario (${secondaryModel}) también falló:`, secondaryError.message);
+        throw new Error(`Ambos modelos fallaron en chat`);
+      }
+    }
 
     // Guardamos la respuesta del bot en el historial
     chatHistory.push({ role: "assistant", content: botResponse });
@@ -165,3 +222,12 @@ export const sendMessageToOsiris = async (userMessage: string): Promise<string> 
 };
 
 export const isApiConfigured = isConfigured;
+
+// Función para obtener información de los modelos configurados
+export const getModelInfo = () => {
+  return {
+    primary: getPrimaryModel(),
+    secondary: getSecondaryModel(),
+    isConfigured: isConfigured()
+  };
+};
